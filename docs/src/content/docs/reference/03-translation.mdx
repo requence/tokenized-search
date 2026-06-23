@@ -1,0 +1,54 @@
+---
+title: Translation
+description: API reference for toTechnicalQuery and toDisplayQuery.
+---
+
+Translation utilities convert between display-form queries (using labels) and technical-form queries (using keys/values).
+
+## toTechnicalQuery
+
+Convert a display-form query string to its technical counterpart.
+
+```tsx
+import { toTechnicalQuery } from '@requence/tokenized-search'
+
+const technical = toTechnicalQuery('Status:Active', tokens)
+// → 'status:active'
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `rawText` | `string` | — | Display-form query |
+| `tokens` | `TokenizedSearchTokenDefinition[]` | — | Token definitions |
+| `negationLabel` | `string` | `'not'` | Negation prefix |
+
+### Returns
+
+`string` — the technical-form query.
+
+---
+
+## toDisplayQuery
+
+Convert a technical-form query string to display form.
+
+```tsx
+import { toDisplayQuery } from '@requence/tokenized-search'
+
+const display = toDisplayQuery('status:active', tokens)
+// → 'Status:Active'
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `technicalText` | `string` | — | Technical-form query |
+| `tokens` | `TokenizedSearchTokenDefinition[]` | — | Token definitions |
+| `negationLabel` | `string` | `'not'` | Negation prefix |
+
+### Returns
+
+`string` — the display-form query.

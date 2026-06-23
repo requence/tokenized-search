@@ -1,0 +1,111 @@
+---
+title: Token Definitions
+description: Configuring token keys, options, and behavior.
+---
+
+Token definitions describe the structured keys your search input recognizes. Each definition configures a key name, display label, available options, and validation rules.
+
+## Basic Definition
+
+```tsx
+const tokens = [
+  {
+    key: 'status',
+    label: 'Status',
+    options: [
+      { value: 'active', label: 'Active' },
+      { value: 'inactive', label: 'Inactive' },
+    ],
+  },
+]
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `key` | `string` | Internal key name (e.g. `'status'`) |
+| `label` | `string?` | Display label in the suggestion dropdown. Defaults to `key`. |
+| `options` | `TokenOption[] \| (query, signal) => ...` | Static or async options |
+| `icon` | `ReactNode?` | Icon shown in the key suggestion dropdown |
+| `exclusive` | `boolean?` | Only one instance of this key allowed |
+| `strict` | `boolean?` | Value must match a provided option |
+| `negatable` | `boolean?` | Enable `not:` prefix for negation |
+| `renderDropdown` | `(props) => ReactNode` | Custom dropdown renderer |
+
+## Exclusive Tokens
+
+Set `exclusive: true` to allow only one instance of a key in the query. If a user tries to add a second `status:` token, it won't appear in the suggestion dropdown:
+
+```tsx
+{ key: 'status', exclusive: true, options: [...] }
+```
+
+## Strict Validation
+
+Set `strict: true` to require values match one of the provided options. Invalid values will not be highlighted as tokens:
+
+```tsx
+{ key: 'priority', strict: true, options: [...] }
+```
+
+## Async Options
+
+Options can be fetched dynamically. The function receives the current query text and an `AbortSignal` for cancellation:
+
+```tsx
+{
+  key: 'customer',
+  label: 'Customer',
+  options: async (query, signal) => {
+    const res = await fetch(`/api/customers?q=${query}`, { signal })
+    return res.json()
+  },
+}
+```
+
+## Negatable Tokens
+
+Enable negation with `negatable: true`. A "Not" option appears in the value dropdown, allowing users to negate values (e.g. `status:not:active`):
+
+```tsx
+{ key: 'status', negatable: true, options: [...] }
+```
+
+Customize the negation label for i18n with the `negationLabel` prop on the component:
+
+```tsx
+<TokenizedSearch negationLabel="nicht" ... />
+```
+
+## Custom Dropdowns
+
+Replace the default dropdown for a token with a fully custom renderer:
+
+```tsx
+{
+  key: 'date',
+  renderDropdown: ({ value, onChange, close }) => (
+    <DatePicker
+      value={value}
+      onChange={(v) => onChange(v, true)} // true = close dropdown
+    />
+  ),
+}
+```
+
+The `renderDropdown` callback receives:
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `value` | `string` | Current token value |
+| `onChange` | `(value, closeDropdown?) => void` | Update the value |
+| `close` | `() => void` | Close the dropdown |
+
+## Option Shape
+
+Each option in the `options` array has:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `value` | `string` | Internal value (emitted in segments) |
+| `label` | `string?` | Display text. Defaults to `value`. |
+| `id` | `string?` | Optional identifier passed through to parsed segments |

@@ -1,0 +1,22 @@
+---
+/**
+ * Wraps the interactive React demo inside an opaque container
+ * so it looks correct on the transparent splash page.
+ * "not-content" opts out of Starlight's .sl-markdown-content styles.
+ */
+---
+
+<div class="not-content example-wrapper">
+  <slot />
+</div>
+
+<style>
+  .example-wrapper {
+    border: 1px solid color-mix(in srgb, var(--color-zinc-700) 50%, transparent);
+    border-radius: 0.375rem;
+    background-color: var(--color-zinc-900);
+    padding: 1.5rem;
+    margin-block: 1.5rem;
+    overflow-x: auto;
+  }
+</style>

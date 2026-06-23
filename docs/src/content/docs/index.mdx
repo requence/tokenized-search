@@ -1,0 +1,53 @@
+---
+title: '@requence/tokenized-search'
+description: Tokenized search input with structured query parsing for React.
+template: splash
+hero:
+  tagline: A compound React component for building structured search inputs with key:value tokens, rich text editing, and dropdown suggestions.
+  actions:
+    - text: Get Started
+      link: /concepts/01-getting-started/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/requence/tokenized-search
+      variant: minimal
+      icon: github
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components'
+import LucideIcon from '../../components/LucideIcon.astro'
+import ExampleWrapper from '../../components/example/ExampleWrapper.astro'
+import LiveExample from '../../components/example/LiveExample.tsx'
+
+## Features
+
+<CardGrid>
+  <Card title="Token Highlighting">
+    <LucideIcon name="Palette" slot="icon" size={22} />
+    TipTap-powered rich text editor with inline token highlighting. Keys, values, and negation prefixes are visually distinguished with customizable marks.
+  </Card>
+  <Card title="Dropdown Suggestions">
+    <LucideIcon name="ListFilter" slot="icon" size={22} />
+    Context-aware dropdowns suggest available token keys and values as the user types. Supports both static arrays and async option sources with AbortSignal.
+  </Card>
+  <Card title="Structured Parsing">
+    <LucideIcon name="Braces" slot="icon" size={22} />
+    `parseTokenizedSearch` extracts typed segments from raw query text, producing structured token and text segments with position info.
+  </Card>
+  <Card title="Compound Styling API">
+    <LucideIcon name="Paintbrush" slot="icon" size={22} />
+    Style every element using declarative slot components. Pass plain Tailwind classes — no internal CSS selectors needed. Use `aria-selected:` and `data-[dirty]:` variants for state styling.
+  </Card>
+</CardGrid>
+
+## Live Example
+
+<ExampleWrapper>
+  <LiveExample client:only="react" />
+</ExampleWrapper>
+
+## Installation
+
+```bash
+npm install @requence/tokenized-search
+```

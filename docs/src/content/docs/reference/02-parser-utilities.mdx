@@ -1,0 +1,51 @@
+---
+title: Parser Utilities
+description: API reference for parseTokenizedSearch and getOptionDisplayText.
+---
+
+## parseTokenizedSearch
+
+Parse a raw search string into segments of recognized `key:value` tokens and plain text.
+
+```tsx
+import { parseTokenizedSearch } from '@requence/tokenized-search'
+
+const segments = parseTokenizedSearch<'status' | 'source'>(
+  'status:active free text',
+  ['status', 'source'],
+)
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `rawText` | `string` | The raw search query |
+| `tokenKeys` | `string[]` | Recognized token key names (and labels) |
+
+### Returns
+
+`TokenizedSearchSegment[]` — array of `TokenSegment` and `TextSegment` objects.
+
+---
+
+## getOptionDisplayText
+
+Resolve the display text for a token option.
+
+```tsx
+import { getOptionDisplayText } from '@requence/tokenized-search'
+
+const text = getOptionDisplayText({ value: 'active', label: 'Active' })
+// → 'Active'
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `option` | `TokenOption` | The option to resolve |
+
+### Returns
+
+`string` — `option.label ?? option.value`.

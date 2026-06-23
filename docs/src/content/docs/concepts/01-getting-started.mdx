@@ -1,0 +1,82 @@
+---
+title: Getting Started
+description: Install and set up @requence/tokenized-search in your React project.
+---
+
+## Installation
+
+```bash
+npm install @requence/tokenized-search
+```
+
+## Tailwind CSS Setup
+
+This package uses [Tailwind CSS](https://tailwindcss.com/) utility classes internally (via `tailwind-merge`). Add the `@source` directive to your CSS entry point so Tailwind scans the package for class names:
+
+```css
+@import "tailwindcss";
+@source "../node_modules/@requence/tokenized-search";
+```
+
+## Basic Usage
+
+```tsx
+import { TokenizedSearch } from '@requence/tokenized-search'
+
+function App() {
+  return (
+    <TokenizedSearch
+      tokens={[
+        {
+          key: 'status',
+          label: 'Status',
+          options: [
+            { value: 'active', label: 'Active' },
+            { value: 'inactive', label: 'Inactive' },
+          ],
+        },
+        {
+          key: 'source',
+          label: 'Source',
+          options: async (query, signal) => {
+            const res = await fetch(`/api/sources?q=${query}`, { signal })
+            return res.json()
+          },
+        },
+      ]}
+      onSearch={(segments, rawText) => {
+        console.log(segments, rawText)
+      }}
+    />
+  )
+}
+```
+
+The component works out of the box with default styling. To customize the appearance, use [slot sub-components](/concepts/04-styling/).
+
+## Controlled vs Uncontrolled
+
+**Uncontrolled** (default) — pass `defaultValue` to set the initial query:
+
+```tsx
+<TokenizedSearch defaultValue="status:active" ... />
+```
+
+**Controlled** — pass `value` and `onChange` to manage state externally:
+
+```tsx
+const [value, setValue] = useState('')
+
+<TokenizedSearch
+  value={value}
+  onChange={(newValue, segments) => setValue(newValue)}
+  ...
+/>
+```
+
+## Next Steps
+
+- [Token Definitions](/concepts/02-token-definitions/) — configure token keys, options, and behavior
+- [Query Parsing](/concepts/03-query-parsing/) — understand parsed segments and translation utilities
+- [Styling](/concepts/04-styling/) — customize appearance with compound slot components
+- [API Reference](/reference/01-tokenized-search/) — full component props and slot reference

@@ -1,0 +1,14 @@
+# Docs Docker build – context is the repo root but we only need
+# docs/ and src/ directories.
+.git
+node_modules
+dist
+docs/node_modules
+docs/dist
+docs/.astro
+.changeset
+*.log
+.DS_Store
+.env
+.env.production
+.vscode

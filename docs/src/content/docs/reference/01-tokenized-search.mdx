@@ -1,0 +1,92 @@
+---
+title: TokenizedSearch
+description: API reference for the TokenizedSearch component.
+---
+
+## Import
+
+```tsx
+import { TokenizedSearch } from '@requence/tokenized-search'
+```
+
+## Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `tokens` | `(TokenizedSearchTokenDefinition \| null)[]` | `[]` | Token key definitions |
+| `value` | `string` | — | Controlled search value |
+| `defaultValue` | `string` | `''` | Default value (uncontrolled) |
+| `onChange` | `(value, segments) => void` | — | Called on text change |
+| `onSearch` | `(segments, rawText) => void` | — | Called on Enter submit |
+| `small` | `boolean` | `false` | Small variant |
+| `className` | `string` | — | Root container class |
+| `onKeyDown` | `(event) => void` | — | Key handler (when dropdown is closed) |
+| `ref` | `Ref<TokenizedSearchHandle>` | — | Imperative handle |
+| `autoFocus` | `boolean` | `false` | Auto-focus on mount |
+| `negationLabel` | `string` | `'not'` | Negation prefix label for i18n |
+| `children` | `ReactNode` | — | Slot sub-components for styling |
+
+## Imperative Handle
+
+```tsx
+interface TokenizedSearchHandle {
+  submit: () => void
+}
+```
+
+Access via `ref`:
+
+```tsx
+const searchRef = useRef<TokenizedSearchHandle>(null)
+
+<TokenizedSearch ref={searchRef} ... />
+
+// Programmatic submit
+searchRef.current?.submit()
+```
+
+## Slot Components
+
+All slots accept a `className` prop that is merged with internal base styles via `tailwind-merge`. Some slots also accept `children` for content.
+
+### Root-level Slots
+
+| Slot | `className` | `children` | Description |
+|------|-------------|------------|-------------|
+| `<Input>` | Editor area container | Nested input slots | Wraps the TipTap editor and clear button |
+| `<ClearButton>` | Button styling | Icon element | Clear button (hidden when editor is empty) |
+| `<SubmitButton>` | Button styling | Icon element | Submit button (supports `data-[dirty]:` variant) |
+| `<Dropdown>` | Container styling | Nested dropdown slots | Dropdown container |
+
+### Input Slots
+
+Must be children of `<Input>`.
+
+| Slot | `className` | `children` | Description |
+|------|-------------|------------|-------------|
+| `<Placeholder>` | Text styling | Placeholder text | Shown when editor is empty |
+| `<TokenKey>` | Mark styling | — | Inline mark for token keys (e.g. `Status:`) |
+| `<TokenValue>` | Mark styling | — | Inline mark for token values (e.g. `Active`) |
+| `<TokenNegation>` | Mark styling | — | Inline mark for negation prefix (e.g. `not:`) |
+
+### Dropdown Slots
+
+Must be children of `<Dropdown>`.
+
+| Slot | `className` | `children` | Description |
+|------|-------------|------------|-------------|
+| `<DropdownOption>` | Option styling | — | Regular dropdown option (`aria-selected:` for highlight) |
+| `<DropdownNotOption>` | Option styling | — | "Not" option for negatable tokens (`aria-selected:` for highlight) |
+| `<DropdownSeparator>` | Border/divider styling | — | Separator between options and "Not" option |
+| `<HighlightMatch>` | Text color | — | Matched substring within options |
+| `<FilterByLabel>` | Text styling | Label text (e.g. "Filter by") | Header above key suggestions |
+| `<SuggestionIcon>` | Icon wrapper styling | — | Icon container in key suggestions |
+| `<EmptyMessage>` | Text styling | Message text | Shown when no options match |
+| `<Loader>` | Container styling | Spinner + text | Shown while loading async options |
+
+## Data Attributes
+
+| Attribute | Element | When set |
+|-----------|---------|----------|
+| `aria-selected` | `<DropdownOption>`, `<DropdownNotOption>` | Option is highlighted via keyboard |
+| `data-dirty` | `<SubmitButton>` | Query text differs from last submission |

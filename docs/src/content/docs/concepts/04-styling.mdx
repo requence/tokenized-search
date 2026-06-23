@@ -1,0 +1,319 @@
+---
+title: Styling
+description: Customize every visual element using compound slot components.
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+TokenizedSearch uses a **compound component** pattern for styling. Instead of passing a large configuration object, you compose declarative sub-components that configure each visual element individually.
+
+These sub-components don't render anything on their own — they are read by the root `<TokenizedSearch>` component to extract `className` and `children` values.
+
+## How It Works
+
+```tsx
+<TokenizedSearch tokens={tokens} onSearch={handleSearch}>
+  <TokenizedSearch.Input className="text-white">
+    <TokenizedSearch.Placeholder className="text-zinc-500">
+      Search…
+    </TokenizedSearch.Placeholder>
+  </TokenizedSearch.Input>
+</TokenizedSearch>
+```
+
+Every slot accepts a `className` prop that gets merged with the component's internal base styles via `tailwind-merge`. Some slots also accept `children` for content (icons, text).
+
+---
+
+## Input Slots
+
+### `<Input>`
+
+Wraps the editor area. Its `className` controls the container around the TipTap editor and clear button.
+
+```tsx
+<TokenizedSearch.Input className="border border-zinc-600 bg-black/30 text-white">
+  {/* Nested input slots go here */}
+</TokenizedSearch.Input>
+```
+
+### `<Placeholder>`
+
+The placeholder text shown when the editor is empty. Pass the text as `children`:
+
+```tsx
+<TokenizedSearch.Placeholder className="text-zinc-500">
+  Filter…
+</TokenizedSearch.Placeholder>
+```
+
+### `<TokenKey>`, `<TokenValue>`, `<TokenNegation>`
+
+Style the inline token marks rendered inside the editor. These control the CSS classes applied to the TipTap marks for the key (e.g. `Status:`), value (e.g. `Active`), and negation prefix (e.g. `not:`):
+
+```tsx
+<TokenizedSearch.TokenKey className="text-orange-300 bg-orange-500/25" />
+<TokenizedSearch.TokenValue className="text-orange-200 bg-orange-500/10" />
+<TokenizedSearch.TokenNegation className="text-orange-200/60 bg-orange-500/10" />
+```
+
+<Aside type="note">
+`TokenKey`, `TokenValue`, and `TokenNegation` must be direct children of `<Input>`.
+</Aside>
+
+---
+
+## Action Slots
+
+### `<ClearButton>`
+
+The clear button that appears when the editor has content. Pass the icon as `children`:
+
+```tsx
+<TokenizedSearch.ClearButton className="text-zinc-500 hover:text-zinc-300">
+  <X className="size-full" />
+</TokenizedSearch.ClearButton>
+```
+
+If no `<ClearButton>` is provided, no clear button is rendered.
+
+### `<SubmitButton>`
+
+The search/submit button. Pass the icon as `children`:
+
+```tsx
+<TokenizedSearch.SubmitButton className="border-zinc-600 bg-zinc-700/50">
+  <Search className="size-3" />
+</TokenizedSearch.SubmitButton>
+```
+
+If no `<SubmitButton>` is provided, no submit button is rendered.
+
+#### Dirty State
+
+When the query has unsaved changes (text differs from the last submitted search), the submit button receives a `data-dirty` attribute. Use Tailwind's `data-[dirty]:` variant to style the dirty state:
+
+```tsx
+<TokenizedSearch.SubmitButton
+  className="border-zinc-600 bg-zinc-700/50 data-[dirty]:border-orange-400 data-[dirty]:bg-orange-950/30"
+>
+  <Search className="size-3" />
+</TokenizedSearch.SubmitButton>
+```
+
+---
+
+## Dropdown Slots
+
+All dropdown slots must be children of `<Dropdown>`.
+
+### `<Dropdown>`
+
+The dropdown container:
+
+```tsx
+<TokenizedSearch.Dropdown className="border-zinc-700 bg-zinc-900">
+  {/* Nested dropdown slots go here */}
+</TokenizedSearch.Dropdown>
+```
+
+### `<DropdownOption>`
+
+Styles individual dropdown options:
+
+```tsx
+<TokenizedSearch.DropdownOption
+  className="text-zinc-300 hover:bg-zinc-800 aria-selected:bg-zinc-700/80 aria-selected:text-white"
+/>
+```
+
+#### Highlighted State
+
+The currently highlighted option receives `aria-selected="true"`. Use Tailwind's `aria-selected:` variant:
+
+```tsx
+aria-selected:bg-zinc-700/80 aria-selected:text-white
+```
+
+### `<DropdownNotOption>`
+
+Styles the "Not" option shown for negatable tokens. Works identically to `<DropdownOption>`:
+
+```tsx
+<TokenizedSearch.DropdownNotOption
+  className="text-zinc-500 aria-selected:bg-zinc-700/80 aria-selected:text-white"
+/>
+```
+
+### `<DropdownSeparator>`
+
+The visual separator between regular options and the "Not" option:
+
+```tsx
+<TokenizedSearch.DropdownSeparator className="border-zinc-700" />
+```
+
+### `<HighlightMatch>`
+
+Styles the matched text substring within dropdown options (the part that matches the user's current input):
+
+```tsx
+<TokenizedSearch.HighlightMatch className="text-orange-300" />
+```
+
+### `<FilterByLabel>`
+
+The label shown above the key suggestion dropdown (e.g. "Filter by"). Pass the text as `children`:
+
+```tsx
+<TokenizedSearch.FilterByLabel className="text-zinc-500">
+  Filter by
+</TokenizedSearch.FilterByLabel>
+```
+
+### `<SuggestionIcon>`
+
+Styles the icon wrapper in the key suggestion dropdown:
+
+```tsx
+<TokenizedSearch.SuggestionIcon className="text-zinc-500" />
+```
+
+### `<EmptyMessage>`
+
+Shown when no dropdown options match the current input. Pass the text as `children`:
+
+```tsx
+<TokenizedSearch.EmptyMessage className="text-zinc-500">
+  No matching options
+</TokenizedSearch.EmptyMessage>
+```
+
+### `<Loader>`
+
+Shown while async options are being fetched. Pass both the spinner icon and loading text as `children`:
+
+```tsx
+<TokenizedSearch.Loader>
+  <Loader2 className="size-3.5 animate-spin" />
+  Loading…
+</TokenizedSearch.Loader>
+```
+
+---
+
+## Data Attributes
+
+TokenizedSearch uses semantic HTML attributes for state, enabling Tailwind variant-based styling:
+
+| Attribute | Element | When set |
+|-----------|---------|----------|
+| `aria-selected` | Dropdown option buttons | The option is currently highlighted (keyboard navigation) |
+| `data-dirty` | Submit button | The query text differs from the last submitted search |
+
+---
+
+## Full Dark Theme Example
+
+```tsx
+import { TokenizedSearch } from '@requence/tokenized-search'
+import { Loader2, Search, X } from 'lucide-react'
+
+function DarkSearch(props) {
+  return (
+    <TokenizedSearch
+      {...props}
+      className="outline-solid outline-3 border-0 bg-transparent outline-transparent focus-within:outline-zinc-700/50"
+    >
+      <TokenizedSearch.Input className="rounded-l border border-r-0 border-zinc-600 bg-black/30 text-white focus-within:border-zinc-500 hover:border-zinc-500">
+        <TokenizedSearch.Placeholder className="text-zinc-600">
+          Filter…
+        </TokenizedSearch.Placeholder>
+        <TokenizedSearch.TokenKey className="bg-orange-500/25 text-orange-300" />
+        <TokenizedSearch.TokenValue className="bg-orange-500/10 text-orange-200" />
+        <TokenizedSearch.TokenNegation className="bg-orange-500/10 text-orange-200/60" />
+      </TokenizedSearch.Input>
+
+      <TokenizedSearch.ClearButton className="text-zinc-500 hover:text-zinc-300">
+        <X className="size-full" />
+      </TokenizedSearch.ClearButton>
+
+      <TokenizedSearch.SubmitButton className="border border-zinc-600 bg-zinc-700/50 text-zinc-400 hover:border-zinc-500 hover:bg-zinc-600/60 hover:text-zinc-200 data-[dirty]:border-orange-400/50 data-[dirty]:bg-orange-950/30 data-[dirty]:text-orange-400">
+        <Search className="size-3" />
+      </TokenizedSearch.SubmitButton>
+
+      <TokenizedSearch.Dropdown className="border-zinc-700 bg-zinc-900">
+        <TokenizedSearch.DropdownOption className="text-zinc-300 hover:bg-zinc-800 aria-selected:bg-zinc-700/80 aria-selected:text-white" />
+        <TokenizedSearch.DropdownNotOption className="text-zinc-500 hover:bg-zinc-800 aria-selected:bg-zinc-700/80 aria-selected:text-white" />
+        <TokenizedSearch.DropdownSeparator className="border-zinc-700" />
+        <TokenizedSearch.HighlightMatch className="text-orange-300" />
+        <TokenizedSearch.FilterByLabel className="text-zinc-500">
+          Filter by
+        </TokenizedSearch.FilterByLabel>
+        <TokenizedSearch.SuggestionIcon className="text-zinc-500" />
+        <TokenizedSearch.EmptyMessage>No matching options</TokenizedSearch.EmptyMessage>
+        <TokenizedSearch.Loader>
+          <Loader2 className="size-3.5 animate-spin" />
+          Loading…
+        </TokenizedSearch.Loader>
+      </TokenizedSearch.Dropdown>
+    </TokenizedSearch>
+  )
+}
+```
+
+## Creating a Themed Wrapper
+
+A common pattern is to create a project-level wrapper that pre-configures all slots, so consumers only pass behavioral props:
+
+```tsx
+import { TokenizedSearch as Base } from '@requence/tokenized-search'
+import type { TokenizedSearchProps } from '@requence/tokenized-search'
+import { Loader2, Search, X } from 'lucide-react'
+
+export function TokenizedSearch<K extends string>(
+  props: Omit<TokenizedSearchProps<K>, 'children'>,
+) {
+  return (
+    <Base {...props}>
+      <Base.Input className="...">
+        <Base.Placeholder className="...">Filter…</Base.Placeholder>
+        <Base.TokenKey className="..." />
+        <Base.TokenValue className="..." />
+      </Base.Input>
+
+      <Base.ClearButton className="...">
+        <X className="size-full" />
+      </Base.ClearButton>
+
+      <Base.SubmitButton className="...">
+        <Search className="size-3" />
+      </Base.SubmitButton>
+
+      <Base.Dropdown className="...">
+        <Base.DropdownOption className="..." />
+        <Base.DropdownNotOption className="..." />
+        <Base.DropdownSeparator className="..." />
+        <Base.HighlightMatch className="..." />
+        <Base.FilterByLabel className="...">Filter by</Base.FilterByLabel>
+        <Base.SuggestionIcon className="..." />
+        <Base.EmptyMessage>No matching options</Base.EmptyMessage>
+        <Base.Loader>
+          <Loader2 className="size-3.5 animate-spin" />
+          Loading…
+        </Base.Loader>
+      </Base.Dropdown>
+    </Base>
+  )
+}
+```
+
+Now consumers use it without thinking about styling:
+
+```tsx
+<TokenizedSearch
+  tokens={tokens}
+  onSearch={handleSearch}
+  defaultValue="status:active"
+/>
+```

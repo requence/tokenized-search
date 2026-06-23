@@ -1,0 +1,87 @@
+---
+title: Query Parsing
+description: Understanding how search queries are parsed into structured segments.
+---
+
+## Parsing a Query
+
+The `parseTokenizedSearch` function breaks a raw query string into typed segments — tokens and free text — based on defined token keys.
+
+```tsx
+import { parseTokenizedSearch } from '@requence/tokenized-search'
+
+const segments = parseTokenizedSearch(
+  'status:active hello world',
+  ['status', 'source'],
+)
+// [
+//   { type: 'token', key: 'status', value: 'active', start: 0, end: 13 },
+//   { type: 'text', text: ' hello world', start: 13, end: 25 },
+// ]
+```
+
+## Segment Types
+
+### Token Segments
+
+Produced when the parser finds a recognized `key:value` pattern:
+
+```ts
+interface TokenSegment {
+  type: 'token'
+  key: string       // the matched key
+  value: string     // the value after the colon
+  id?: string       // option id, if matched
+  negated?: boolean  // true if prefixed with "not:"
+  start: number     // character offset in the raw string
+  end: number
+}
+```
+
+### Text Segments
+
+Everything that isn't a recognized token:
+
+```ts
+interface TextSegment {
+  type: 'text'
+  text: string
+  start: number
+  end: number
+}
+```
+
+## Quoted Values
+
+Values containing spaces can be quoted with either double or single quotes:
+
+```
+status:"in progress"
+customer:'Jane Doe'
+```
+
+The quotes are stripped from the parsed `value`.
+
+## Translation Utilities
+
+Use `toTechnicalQuery` and `toDisplayQuery` to convert between user-facing labels and internal keys/values. This is useful when you display labels in the UI but store technical keys in URLs or API calls.
+
+### Display → Technical
+
+```tsx
+import { toTechnicalQuery } from '@requence/tokenized-search'
+
+const technical = toTechnicalQuery('Status:Active', tokens)
+// → 'status:active'
+```
+
+### Technical → Display
+
+```tsx
+import { toDisplayQuery } from '@requence/tokenized-search'
+
+const display = toDisplayQuery('status:active', tokens)
+// → 'Status:Active'
+```
+
+Both functions accept an optional `negationLabel` parameter (default `'not'`) for i18n support.

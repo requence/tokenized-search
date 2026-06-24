@@ -1,5 +1,16 @@
 # @requence/tokenized-search
 
+## 1.1.4
+
+### Patch Changes
+
+- [`2128bb3`](https://github.com/requence/tokenized-search/commit/2128bb34e60596d20100de891b0451b976b492bf) Thanks [@Torsten85](https://github.com/Torsten85)! - Fix editing inside token values not triggering search update. When manually
+  editing a resolved token value (e.g. changing `Name:"A"` to `Name:"B"`) and
+  pressing Enter, the dropdown was consuming the keypress without submitting.
+  Also fix negation being silently dropped in `toTechnicalQuery` and
+  `toDisplayQuery` because the parser already strips the `not:` prefix from
+  the value — both functions now use `seg.negated` directly.
+
 ## 1.1.3
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @requence/tokenized-search
 
+## 1.1.2
+
+### Patch Changes
+
+- [`7ddd4c5`](https://github.com/requence/tokenized-search/commit/7ddd4c50525f8bab7700cf7d19ca1a78444ce8eb) Thanks [@Torsten85](https://github.com/Torsten85)! - Fix quoted values in negated tokens being double-quoted in parsed segments. For inputs like `name:not:"delete"`, the parser now correctly strips surrounding quotes after removing the negation prefix, producing `{ value: "delete", negated: true }` instead of `{ value: "\"delete\"", negated: true }`.
+
 ## 1.1.1
 
 ### Patch Changes

@@ -1049,6 +1049,14 @@ function TokenizedSearchBase<K extends string = string>({
             technicalValue = seg.value.slice(4)
             negated = true
           }
+          if (negated) {
+            if (
+              (technicalValue.startsWith('"') && technicalValue.endsWith('"')) ||
+              (technicalValue.startsWith(sQuote) && technicalValue.endsWith(sQuote))
+            ) {
+              technicalValue = technicalValue.slice(1, -1)
+            }
+          }
         }
 
         const valMap = optionValueMapRef.current.get(def.key.toLowerCase())

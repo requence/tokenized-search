@@ -31,4 +31,9 @@ export const tokens: TokenizedSearchTokenDefinition[] = [
       { value: 'carol', label: 'Carol' },
     ],
   },
+  {
+    key: 'name',
+    label: 'Name',
+    negatable: true,
+  },
 ]

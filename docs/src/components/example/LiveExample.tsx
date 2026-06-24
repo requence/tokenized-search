@@ -22,7 +22,7 @@ export default function LiveExample() {
       >
         <TokenizedSearch.Input className="bg-black/30 text-white">
           <TokenizedSearch.Placeholder className="text-zinc-600">
-            Try typing &quot;status:active priority:high&quot;…
+            Try typing &quot;status:active name:John&quot;…
           </TokenizedSearch.Placeholder>
           <TokenizedSearch.TokenKey className="bg-[color-mix(in_srgb,var(--color-orange-500)_25%,var(--color-zinc-900))] text-orange-300" />
           <TokenizedSearch.TokenValue className="bg-[color-mix(in_srgb,var(--color-orange-500)_10%,var(--color-zinc-900))] text-orange-200" />
@@ -39,8 +39,8 @@ export default function LiveExample() {
 
         <TokenizedSearch.Dropdown className="shadow-lg/50 border-zinc-700 bg-zinc-900">
           <TokenizedSearch.DropdownOption className="text-zinc-300 bg-transparent hover:bg-zinc-800 aria-selected:bg-zinc-700/80 aria-selected:text-white" />
-          <TokenizedSearch.DropdownNotOption className="text-zinc-500 hover:bg-zinc-800 aria-selected:bg-zinc-700/80 aria-selected:text-white" />
-          <TokenizedSearch.DropdownSeparator className="border-zinc-700" />
+          <TokenizedSearch.DropdownNotOption className="text-zinc-500 bg-transparent hover:bg-zinc-800 aria-selected:bg-zinc-700/80 aria-selected:text-white" />
+          <TokenizedSearch.DropdownSeparator className="border-zinc-700 border" />
           <TokenizedSearch.HighlightMatch className="text-orange-300" />
           <TokenizedSearch.FilterByLabel className="text-zinc-500">
             Filter by

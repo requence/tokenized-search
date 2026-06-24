@@ -1512,6 +1512,8 @@ function TokenizedSearchBase<K extends string = string>({
         })
       : undefined
 
+  const isStrictValue = currentTokenDef?.strict ?? false
+
   const activeOptions = useMemo(() => {
     let filtered = rawOptions
 
@@ -1538,6 +1540,23 @@ function TokenizedSearchBase<K extends string = string>({
       })
     }
 
+    // For non-strict tokens with a typed value, add it as a selectable option
+    // so the user can confirm it with Enter instead of it defaulting to "not"
+    if (
+      dropdownContext?.mode === 'value' &&
+      effectiveFilterQuery &&
+      !isStrictValue &&
+      !filtered.some(
+        (opt) =>
+          opt.value.toLowerCase() === effectiveFilterQuery.toLowerCase(),
+      )
+    ) {
+      filtered = [
+        { value: effectiveFilterQuery, label: `"${effectiveFilterQuery}"` },
+        ...filtered,
+      ]
+    }
+
     if (
       !isNegated &&
       currentTokenDef?.negatable &&
@@ -1553,9 +1572,7 @@ function TokenizedSearchBase<K extends string = string>({
     }
 
     return filtered
-  }, [rawOptions, filterQuery, usedValues, currentTokenDef, dropdownContext])
-
-  const isStrictValue = currentTokenDef?.strict ?? false
+  }, [rawOptions, filterQuery, usedValues, currentTokenDef, dropdownContext, isStrictValue])
 
   const isDropdownVisible =
     dropdownContext !== null &&
@@ -1568,12 +1585,21 @@ function TokenizedSearchBase<K extends string = string>({
 
   const handleKeyDown = useEffectEvent((event: React.KeyboardEvent) => {
     if (isDropdownVisible) {
-      const getTarget = () =>
-        highlighted >= 0 && highlighted < activeOptions.length
-          ? activeOptions[highlighted]
-          : filterQuery
-            ? activeOptions[0]
-            : undefined
+      const getTarget = () => {
+        if (highlighted >= 0 && highlighted < activeOptions.length) {
+          return activeOptions[highlighted]
+        }
+        if (!filterQuery) return undefined
+        // When the typed value exactly matches the negation label, prefer the negate option
+        if (
+          currentTokenDef?.negatable &&
+          filterQuery.toLowerCase() === negationLabel.toLowerCase()
+        ) {
+          const notOpt = activeOptions.find((o) => o.value === '__not__')
+          if (notOpt) return notOpt
+        }
+        return activeOptions[0]
+      }
 
       switch (event.key) {
         case 'ArrowDown': {
@@ -1844,12 +1870,14 @@ function TokenizedSearchBase<K extends string = string>({
                 {activeOptions.map((option, index) =>
                   option.value === '__not__' ? (
                     <Fragment key="__not__">
-                      <hr
-                        className={twMerge(
-                          'my-1 border-gray-200',
-                          slotConfig.dropdown.separator,
-                        )}
-                      />
+                      {index > 0 && (
+                        <hr
+                          className={twMerge(
+                            'my-1 border-gray-200',
+                            slotConfig.dropdown.separator,
+                          )}
+                        />
+                      )}
                       <button
                         type="button"
                         tabIndex={-1}

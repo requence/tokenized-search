@@ -62,6 +62,28 @@ Options can be fetched dynamically. The function receives the current query text
 }
 ```
 
+### Value Resolution
+
+When text containing async token labels is pasted or loaded (e.g. from a shared URL), the component automatically calls the `options` function to resolve display labels back to their technical values. During resolution, the submit button receives `aria-busy` and `disabled` attributes — the input remains fully interactive.
+
+Resolution uses **exact label matching**: only options where `option.label` exactly matches the pasted text (case-insensitive) are resolved. Free-text values that don't match any option are left as-is.
+
+Resolved values include an `id` field in the parsed segment, while free-text values do not — use this to distinguish between the two in your `onSearch` handler:
+
+```tsx
+onSearch={(segments) => {
+  for (const seg of segments) {
+    if (seg.type === 'token' && seg.key === 'customer') {
+      if (seg.id) {
+        // Resolved from option — seg.value is the technical value
+      } else {
+        // Free-text — seg.value is what the user typed
+      }
+    }
+  }
+}}
+```
+
 ## Negatable Tokens
 
 Enable negation with `negatable: true`. A "Not" option appears in the value dropdown, allowing users to negate values (e.g. `status:not:active`):

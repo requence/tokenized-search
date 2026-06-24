@@ -9,6 +9,7 @@ export function toTechnicalQuery(
   rawText: string,
   tokens: TokenizedSearchTokenDefinition<string>[],
   negationLabel: string = 'not',
+  optionValueMap?: Map<string, Map<string, string>>,
 ): string {
   const tokenKeysAndLabels = tokens.flatMap((t) => [
     t.key,
@@ -47,6 +48,14 @@ export function toTechnicalQuery(
       )
       if (option) {
         technicalValue = option.value
+      }
+    } else if (optionValueMap) {
+      const valMap = optionValueMap.get(def.key.toLowerCase())
+      if (valMap) {
+        const mapped = valMap.get(technicalValue.toLowerCase())
+        if (mapped) {
+          technicalValue = mapped
+        }
       }
     }
     if (negated) {

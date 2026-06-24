@@ -55,7 +55,7 @@ All slots accept a `className` prop that is merged with internal base styles via
 |------|-------------|------------|-------------|
 | `<Input>` | Editor area container | Nested input slots | Wraps the TipTap editor and clear button |
 | `<ClearButton>` | Button styling | Icon element | Clear button (hidden when editor is empty) |
-| `<SubmitButton>` | Button styling | Icon element | Submit button (supports `data-[dirty]:` variant) |
+| `<SubmitButton>` | Button styling | Icon element | Submit button (supports `data-[dirty]:` and `aria-busy` variants) |
 | `<Dropdown>` | Container styling | Nested dropdown slots | Dropdown container |
 
 ### Input Slots
@@ -90,3 +90,5 @@ Must be children of `<Dropdown>`.
 |-----------|---------|----------|
 | `aria-selected` | `<DropdownOption>`, `<DropdownNotOption>` | Option is highlighted via keyboard |
 | `data-dirty` | `<SubmitButton>` | Query text differs from last submission |
+| `aria-busy` | `<SubmitButton>` | Async token values are being resolved (e.g. after paste) |
+| `data-resolving` | `<SubmitButton>` | Same as `aria-busy` — alternative CSS hook |

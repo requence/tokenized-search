@@ -101,6 +101,21 @@ When the query has unsaved changes (text differs from the last submitted search)
 </TokenizedSearch.SubmitButton>
 ```
 
+#### Resolving State
+
+When pasted or loaded text contains async token values that need to be resolved, the submit button receives `aria-busy="true"`, `data-resolving`, and `disabled` until resolution completes. The input remains fully interactive during this time — only submit is blocked.
+
+Use the `group` class together with `group-aria-busy:` variants to swap between a search icon and a loading spinner:
+
+```tsx
+<TokenizedSearch.SubmitButton
+  className="group border-zinc-600 bg-zinc-700/50"
+>
+  <Search className="size-3 group-aria-busy:hidden" />
+  <Loader2 className="size-3 animate-spin hidden group-aria-busy:block" />
+</TokenizedSearch.SubmitButton>
+```
+
 ---
 
 ## Dropdown Slots
@@ -210,6 +225,8 @@ TokenizedSearch uses semantic HTML attributes for state, enabling Tailwind varia
 |-----------|---------|----------|
 | `aria-selected` | Dropdown option buttons | The option is currently highlighted (keyboard navigation) |
 | `data-dirty` | Submit button | The query text differs from the last submitted search |
+| `aria-busy` | Submit button | Async token values are being resolved (e.g. after paste) |
+| `data-resolving` | Submit button | Same as `aria-busy` — alternative CSS hook for styling |
 
 ---
 
@@ -238,8 +255,9 @@ function DarkSearch(props) {
         <X className="size-full" />
       </TokenizedSearch.ClearButton>
 
-      <TokenizedSearch.SubmitButton className="border border-zinc-600 bg-zinc-700/50 text-zinc-400 hover:border-zinc-500 hover:bg-zinc-600/60 hover:text-zinc-200 data-[dirty]:border-orange-400/50 data-[dirty]:bg-orange-950/30 data-[dirty]:text-orange-400">
-        <Search className="size-3" />
+      <TokenizedSearch.SubmitButton className="group border border-zinc-600 bg-zinc-700/50 text-zinc-400 hover:border-zinc-500 hover:bg-zinc-600/60 hover:text-zinc-200 data-[dirty]:border-orange-400/50 data-[dirty]:bg-orange-950/30 data-[dirty]:text-orange-400">
+        <Search className="size-3 group-aria-busy:hidden" />
+        <Loader2 className="size-3 animate-spin hidden group-aria-busy:block" />
       </TokenizedSearch.SubmitButton>
 
       <TokenizedSearch.Dropdown className="border-zinc-700 bg-zinc-900">
@@ -286,8 +304,9 @@ export function TokenizedSearch<K extends string>(
         <X className="size-full" />
       </Base.ClearButton>
 
-      <Base.SubmitButton className="...">
-        <Search className="size-3" />
+      <Base.SubmitButton className="group ...">
+        <Search className="size-3 group-aria-busy:hidden" />
+        <Loader2 className="size-3 animate-spin hidden group-aria-busy:block" />
       </Base.SubmitButton>
 
       <Base.Dropdown className="...">

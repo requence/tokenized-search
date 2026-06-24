@@ -22,7 +22,7 @@ export default function LiveExample() {
       >
         <TokenizedSearch.Input className="bg-black/30 text-white">
           <TokenizedSearch.Placeholder className="text-zinc-600">
-            Try typing &quot;status:active name:John&quot;…
+            Try typing &quot;status:active reference:Acme&quot;…
           </TokenizedSearch.Placeholder>
           <TokenizedSearch.TokenKey className="bg-[color-mix(in_srgb,var(--color-orange-500)_25%,var(--color-zinc-900))] text-orange-300" />
           <TokenizedSearch.TokenValue className="bg-[color-mix(in_srgb,var(--color-orange-500)_10%,var(--color-zinc-900))] text-orange-200" />
@@ -33,8 +33,9 @@ export default function LiveExample() {
           <X className="size-3" />
         </TokenizedSearch.ClearButton>
 
-        <TokenizedSearch.SubmitButton className="data-dirty:text-orange-400 data-dirty:outline data-dirty:bg-orange-950/30 data-dirty:hover:border-orange-400/80 outline-orange-500/40 z-10 data-dirty:hover:bg-orange-950/50 data-dirty:group-focus-within:border-orange-400/50 data-dirty:group-hover:border-orange-400/50 border-zinc-600 bg-zinc-700/50 text-zinc-400 hover:border-zinc-500 hover:bg-zinc-600/60 hover:text-zinc-200 focus-visible:outline-zinc-400/50 group-focus-within:border-zinc-500 group-hover:border-zinc-500">
-          <Search className="size-3" />
+        <TokenizedSearch.SubmitButton className="group data-dirty:text-orange-400 data-dirty:outline data-dirty:bg-orange-950/30 data-dirty:hover:border-orange-400/80 outline-orange-500/40 z-10 data-dirty:hover:bg-orange-950/50 data-dirty:group-focus-within:border-orange-400/50 data-dirty:group-hover:border-orange-400/50 border-zinc-600 bg-zinc-700/50 text-zinc-400 hover:border-zinc-500 hover:bg-zinc-600/60 hover:text-zinc-200 focus-visible:outline-zinc-400/50 group-focus-within:border-zinc-500 group-hover:border-zinc-500">
+          <Search className="size-3 group-aria-busy:hidden" />
+          <Loader2 className="size-3 animate-spin hidden group-aria-busy:block" />
         </TokenizedSearch.SubmitButton>
 
         <TokenizedSearch.Dropdown className="shadow-lg/50 border-zinc-700 bg-zinc-900">
@@ -77,6 +78,7 @@ export default function LiveExample() {
                         type: 'token',
                         key: s.key,
                         value: s.value,
+                        ...(s.id ? { id: s.id } : {}),
                         ...(s.negated ? { negated: true } : {}),
                       }
                     : { type: 'text', text: s.text },
@@ -84,7 +86,7 @@ export default function LiveExample() {
                 null,
                 2,
               )
-            : '// Start typing to see parsed segments…'}
+            : '// Press Enter or click the search icon to see parsed segments…'}
         </pre>
       </div>
     </div>

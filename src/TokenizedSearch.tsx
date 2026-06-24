@@ -500,6 +500,12 @@ function TokenizedSearchBase<K extends string = string>({
   // Cache of option label → technical value mappings per token key
   const optionValueMapRef = useRef<Map<string, Map<string, string>>>(new Map())
 
+  // ── Async resolution state ───────────────────────────────────────
+  const [resolving, setResolving] = useState(false)
+  const [resolveGeneration, setResolveGeneration] = useState(0)
+  const resolveAbortRef = useRef<AbortController | null>(null)
+  const resolveAttemptsRef = useRef<Set<string>>(new Set())
+
   // Dropdown positioning state
   const [dropdownPos, setDropdownPos] = useState<{
     top: number
@@ -755,6 +761,11 @@ function TokenizedSearchBase<K extends string = string>({
 
     const handleBlur = () => {
       setTimeout(() => {
+        const container = containerRef.current
+        const activeEl = document.activeElement
+        if (container && container.contains(activeEl)) {
+          return
+        }
         setDropdownContext(null)
         applyTokenMarks(
           editor,
@@ -1045,6 +1056,7 @@ function TokenizedSearchBase<K extends string = string>({
         newText,
         tokens,
         negationLabel,
+        optionValueMapRef.current,
       ).trim()
       onChange?.(newText, computeSegments(newText))
       lastSubmittedRef.current = technicalQuery
@@ -1156,8 +1168,113 @@ function TokenizedSearchBase<K extends string = string>({
 
   const segments = useMemo(
     () => computeSegments(value),
-    [computeSegments, value],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [computeSegments, value, resolveGeneration],
   )
+
+  // ── Async value resolution ───────────────────────────────────────
+  //
+  // When the text contains token segments with async options whose values
+  // are not yet in the optionValueMapRef cache (e.g. pasted text on a
+  // fresh page load), call the options() function for each unresolved
+  // value and populate the cache with exact label matches.
+
+  useEffect(() => {
+    // Find token segments that need resolution
+    const unresolvedPairs: { def: TokenizedSearchTokenDefinition<K>; displayValue: string }[] = []
+
+    for (const seg of segments) {
+      if (seg.type !== 'token') continue
+
+      // If the segment already has an id, it was resolved from a cached option
+      if ('id' in seg && seg.id != null) continue
+
+      const def = tokens.find(
+        (t) =>
+          t.key.toLowerCase() === seg.key.toLowerCase() ||
+          (t.label && t.label.toLowerCase() === seg.key.toLowerCase()),
+      )
+      if (!def || typeof def.options !== 'function') continue
+
+      const lk = def.key.toLowerCase()
+      const valMap = optionValueMapRef.current.get(lk)
+      const isCached = valMap?.has(seg.value.toLowerCase())
+
+      // If the value is already mapped (cache hit), skip
+      if (isCached) continue
+
+      // Build a dedup key to avoid re-resolving the same (key, value) pair
+      const attemptKey = `${lk}:${seg.value.toLowerCase()}`
+      if (resolveAttemptsRef.current.has(attemptKey)) continue
+
+      unresolvedPairs.push({ def, displayValue: seg.value })
+    }
+
+    if (unresolvedPairs.length === 0) return
+
+    // Abort any previous in-flight resolution
+    resolveAbortRef.current?.abort()
+    const controller = new AbortController()
+    resolveAbortRef.current = controller
+
+    setResolving(true)
+
+    // Resolve all unresolved values in parallel
+    const resolutions = unresolvedPairs.map(async ({ def, displayValue }) => {
+      const attemptKey = `${def.key.toLowerCase()}:${displayValue.toLowerCase()}`
+      resolveAttemptsRef.current.add(attemptKey)
+
+      try {
+        const optionsFn = def.options as (
+          query: string,
+          signal: AbortSignal,
+        ) => TokenOption[] | Promise<TokenOption[]>
+
+        const results = await optionsFn(displayValue, controller.signal)
+        if (controller.signal.aborted) return
+
+        // Exact label match only
+        const match = results.find(
+          (o) => o.label?.toLowerCase() === displayValue.toLowerCase(),
+        )
+        if (!match) return
+
+        const lk = def.key.toLowerCase()
+
+        // Update value map (label → value)
+        let valMap = optionValueMapRef.current.get(lk)
+        if (!valMap) {
+          valMap = new Map()
+          optionValueMapRef.current.set(lk, valMap)
+        }
+        valMap.set(displayValue.toLowerCase(), match.value)
+
+        // Update id map (value → id, label → id)
+        let idMap = optionIdMapRef.current.get(lk)
+        if (!idMap) {
+          idMap = new Map()
+          optionIdMapRef.current.set(lk, idMap)
+        }
+        idMap.set(match.value.toLowerCase(), match.id ?? match.value)
+        if (match.label) {
+          idMap.set(match.label.toLowerCase(), match.id ?? match.value)
+        }
+      } catch {
+        // Silently ignore resolution failures (network errors, etc.)
+      }
+    })
+
+    Promise.all(resolutions).then(() => {
+      if (controller.signal.aborted) return
+      setResolving(false)
+      setResolveGeneration((g) => g + 1)
+    })
+
+    return () => {
+      controller.abort()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, tokens])
 
   // ── Imperative handle ───────────────────────────────────────────────
 
@@ -1756,7 +1873,7 @@ function TokenizedSearchBase<K extends string = string>({
       event.preventDefault = originalPreventDefault
     }
 
-    if (!consumerPrevented && event.key === 'Enter') {
+    if (!consumerPrevented && event.key === 'Enter' && !resolving) {
       event.preventDefault()
       handleSubmit()
     }
@@ -1764,7 +1881,7 @@ function TokenizedSearchBase<K extends string = string>({
 
   const handleSubmit = useEffectEvent(() => {
     suppressFocusRef.current = true
-    const technicalQuery = toTechnicalQuery(value, tokens, negationLabel).trim()
+    const technicalQuery = toTechnicalQuery(value, tokens, negationLabel, optionValueMapRef.current).trim()
     if (technicalQuery !== lastSubmittedRef.current) {
       lastSubmittedRef.current = technicalQuery
       setSubmittedQuery(technicalQuery)
@@ -1799,8 +1916,9 @@ function TokenizedSearchBase<K extends string = string>({
   })
 
   const currentTechnicalQuery = useMemo(
-    () => toTechnicalQuery(value, tokens, negationLabel).trim(),
-    [value, tokens, negationLabel],
+    () => toTechnicalQuery(value, tokens, negationLabel, optionValueMapRef.current).trim(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [value, tokens, negationLabel, resolveGeneration],
   )
 
   const isDirty = currentTechnicalQuery !== submittedQuery
@@ -2045,11 +2163,14 @@ function TokenizedSearchBase<K extends string = string>({
         <button
           type="button"
           tabIndex={-1}
+          disabled={resolving}
           onMouseDown={() => {
             suppressFocusRef.current = true
           }}
           onClick={handleSubmit}
           data-dirty={isDirty || undefined}
+          data-resolving={resolving || undefined}
+          aria-busy={resolving || undefined}
           className={twMerge(
             'flex shrink-0 cursor-pointer items-center justify-center rounded-r border-l border-gray-300 px-2.5 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600',
             slotConfig.submitButton.className,

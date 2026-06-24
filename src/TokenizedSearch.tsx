@@ -1337,10 +1337,13 @@ function TokenizedSearchBase<K extends string = string>({
       .toLowerCase()
       .startsWith(`${localNot}:`)
     const notPrefix = isNegated ? `${negationLabel}:` : ''
-    const insertionVal = option.label ?? option.value
-    const escapedVal = insertionVal.includes(' ')
+    const isTypedValue = option.id === '__typed_value__'
+    const insertionVal = isTypedValue ? option.value.replace(/^"|"$/g, '') : (option.label ?? option.value)
+    const escapedVal = isTypedValue
       ? `"${insertionVal}"`
-      : insertionVal
+      : insertionVal.includes(' ')
+        ? `"${insertionVal}"`
+        : insertionVal
     const insertion = `${key}:${notPrefix}${escapedVal}`
     const before = text.slice(0, replaceStart)
     const after = text.slice(replaceEnd)
@@ -1552,7 +1555,7 @@ function TokenizedSearchBase<K extends string = string>({
       )
     ) {
       filtered = [
-        { value: effectiveFilterQuery, label: `"${effectiveFilterQuery}"` },
+        { value: effectiveFilterQuery, id: '__typed_value__' },
         ...filtered,
       ]
     }
@@ -1927,11 +1930,13 @@ function TokenizedSearchBase<K extends string = string>({
                             </span>
                           ) : null
                         })()}
+                      {option.id === '__typed_value__' && '"'}
                       <HighlightMatch
                         text={getOptionDisplayText(option)}
                         query={filterQuery}
                         className={slotConfig.dropdown.highlightMatch}
                       />
+                      {option.id === '__typed_value__' && '"'}
                     </button>
                   ),
                 )}

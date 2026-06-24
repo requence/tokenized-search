@@ -34,20 +34,11 @@ export function toTechnicalQuery(
       continue
     }
 
-    // Map localized value back to technical value
+    // Map localized value back to technical value.
+    // The parser already strips the "not:" prefix from seg.value and sets
+    // seg.negated = true, so we use that flag directly.
     let technicalValue = seg.value
-    let negated = false
-    if (def.negatable) {
-      const localNot = negationLabel.toLowerCase() + ':'
-      const vLower = technicalValue.toLowerCase()
-      if (vLower.startsWith(localNot)) {
-        technicalValue = technicalValue.slice(localNot.length)
-        negated = true
-      } else if (vLower.startsWith('not:')) {
-        technicalValue = technicalValue.slice(4)
-        negated = true
-      }
-    }
+    const negated = !!(seg.negated && def.negatable)
     if (Array.isArray(def.options)) {
       const option = def.options.find(
         (o) =>
@@ -104,15 +95,10 @@ export function toDisplayQuery(
     // Translate key to label if present
     const keyString = def.label ?? def.key
 
-    // Translate value to localized label if present
+    // Translate value to localized label if present.
+    // The parser already strips "not:" and sets seg.negated = true.
     let valueString = seg.value
-    let negated = false
-    if (def.negatable) {
-      if (valueString.toLowerCase().startsWith('not:')) {
-        valueString = valueString.slice(4)
-        negated = true
-      }
-    }
+    const negated = !!(seg.negated && def.negatable)
     if (Array.isArray(def.options)) {
       const option = def.options.find(
         (o) => o.value.toLowerCase() === valueString.toLowerCase(),

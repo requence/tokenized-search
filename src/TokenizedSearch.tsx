@@ -196,7 +196,6 @@ function getValidTokenIndices(
   tokenDefs: readonly TokenizedSearchTokenDefinition<string>[],
   strictValuesMap: Map<string, Set<string>>,
   activeKey?: string,
-  negationLabel: string = 'not',
 ): Set<number> {
   const valid = new Set<number>()
   const seenPairs = new Set<string>()
@@ -237,15 +236,9 @@ function getValidTokenIndices(
         (def.label && def.label.toLowerCase() === activeKey.toLowerCase()))
     if (def.strict && !isActive) {
       const validValues = strictValuesMap.get(lk)
-      let checkValue = seg.value.toLowerCase()
-      if (def.negatable) {
-        const localNot = negationLabel.toLowerCase()
-        if (localNot && checkValue.startsWith(`${localNot}:`)) {
-          checkValue = checkValue.slice(localNot.length + 1)
-        } else if (checkValue.startsWith('not:')) {
-          checkValue = checkValue.slice(4)
-        }
-      }
+      // seg.value already has the "not:" prefix stripped by the parser,
+      // so we can check the value directly against the allowed set.
+      const checkValue = seg.value.toLowerCase()
       if (!validValues || !validValues.has(checkValue)) {
         continue
       }
@@ -278,7 +271,6 @@ function applyTokenMarks(
     tokenDefs,
     strictValuesMap,
     activeKey,
-    negationLabel,
   )
 
   const { tr } = editor.state
@@ -298,6 +290,53 @@ function applyTokenMarks(
     tr.removeMark(from, from + textLength, tokenNegationType)
   }
 
+  // Auto-correct token key casing to match the canonical label.
+  // Also correct negation prefix casing to match negationLabel.
+  // Process in reverse order so position offsets stay valid when lengths differ.
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const seg = segments[i]
+    if (seg.type !== 'token') {
+      continue
+    }
+    const def = tokenDefs.find(
+      (t) =>
+        t.key.toLowerCase() === seg.key.toLowerCase() ||
+        (t.label && t.label.toLowerCase() === seg.key.toLowerCase()),
+    )
+    if (!def) {
+      continue
+    }
+
+    // Correct negation prefix casing (e.g. "Not:" → "not:")
+    // Must run before key correction since it uses positions relative to current key length
+    if (seg.negated && def.negatable) {
+      const negStart = seg.start + seg.key.length + 1 // after "key:"
+      const canonicalNot = negationLabel + ':'
+      // The parser detected "not:" (4 chars) case-insensitively
+      const actualNot = text.slice(negStart, negStart + 4)
+      if (actualNot.toLowerCase() === 'not:' && actualNot !== canonicalNot) {
+        const negFrom = from + negStart
+        const negTo = from + negStart + 4
+        tr.insertText(canonicalNot, negFrom, negTo)
+        // Adjust segment end if canonical negation label differs in length
+        const negLenDiff = canonicalNot.length - 4
+        seg.end += negLenDiff
+      }
+    }
+
+    // Correct key casing (e.g. "name" → "Name")
+    const canonical = def.label ?? def.key
+    if (seg.key !== canonical) {
+      const keyFrom = from + seg.start
+      const keyTo = from + seg.start + seg.key.length
+      tr.insertText(canonical, keyFrom, keyTo)
+      // Update the segment data in-place so mark positions stay correct
+      const lenDiff = canonical.length - seg.key.length
+      seg.end += lenDiff
+      ;(seg as TokenSegment<string>).key = canonical as typeof seg.key
+    }
+  }
+
   for (let i = 0; i < segments.length; i++) {
     if (!validIndices.has(i)) {
       continue
@@ -309,7 +348,8 @@ function applyTokenMarks(
       tr.addMark(from + seg.start, from + keyEnd, tokenKeyType.create())
     }
     if (seg.value.length > 0) {
-      // Check if the value starts with a negation prefix (e.g. "not:")
+      // Check if the segment is negated (the parser already strips "not:" from seg.value
+      // and sets seg.negated = true, so we must use seg.negated here)
       const def = tokenDefs.find(
         (t) =>
           t.key.toLowerCase() === seg.key.toLowerCase() ||
@@ -317,19 +357,47 @@ function applyTokenMarks(
       )
       const tokenNegationType = editor.schema.marks.tokenNegation
       const localNot = negationLabel.toLowerCase() + ':'
-      const valueLower = seg.value.toLowerCase()
       if (
+        seg.negated &&
         def?.negatable &&
-        tokenNegationType &&
-        valueLower.startsWith(localNot)
+        tokenNegationType
       ) {
         const negEnd = keyEnd + localNot.length
         tr.addMark(from + keyEnd, from + negEnd, tokenNegationType.create())
-        if (tokenValueType && seg.value.length > localNot.length) {
+        if (tokenValueType && seg.value.length > 0) {
           tr.addMark(from + negEnd, from + seg.end, tokenValueType.create())
         }
       } else if (tokenValueType) {
         tr.addMark(from + keyEnd, from + seg.end, tokenValueType.create())
+      }
+    }
+  }
+
+  // Apply tokenKey mark to recognized token segments with empty values
+  // (e.g. "Name:" after autocomplete, before a value is typed)
+  for (let i = 0; i < segments.length; i++) {
+    if (validIndices.has(i)) {
+      continue // already handled above
+    }
+    const seg = segments[i]
+    if (seg.type !== 'token' || seg.value.length !== 0) {
+      continue
+    }
+    // Check if this is a recognized token key
+    const def = tokenDefs.find(
+      (t) =>
+        t.key.toLowerCase() === seg.key.toLowerCase() ||
+        (t.label && t.label.toLowerCase() === seg.key.toLowerCase()),
+    )
+    if (!def) {
+      continue
+    }
+    if (tokenKeyType) {
+      const keyEnd = seg.start + seg.key.length + 1 // +1 for the colon
+      tr.addMark(from + seg.start, from + keyEnd, tokenKeyType.create())
+      // Also style the negation prefix (e.g. "not:") if present
+      if (seg.negated && def.negatable && tokenNegationType) {
+        tr.addMark(from + keyEnd, from + seg.end, tokenNegationType.create())
       }
     }
   }
@@ -557,6 +625,15 @@ function TokenizedSearchBase<K extends string = string>({
       transaction: { getMeta: (key: string) => unknown }
     }) => {
       if (transaction.getMeta('tokenMarks')) {
+        // Token mark transactions may also correct key casing, so sync state
+        const text = editor.getText()
+        if (text !== lastTextRef.current) {
+          lastTextRef.current = text
+          if (!isControlled) {
+            setInternalValue(text)
+          }
+          onChange?.(text, computeSegments(text))
+        }
         return
       }
       if (suppressUpdateRef.current) {
@@ -986,7 +1063,6 @@ function TokenizedSearchBase<K extends string = string>({
         tokens,
         strictValuesRef.current,
         undefined,
-        negationLabel,
       )
 
       return raw.flatMap((seg, i): TokenizedSearchSegment<K>[] => {
@@ -1035,28 +1111,20 @@ function TokenizedSearchBase<K extends string = string>({
           }))
         }
 
-        // Map key and value back to their technical counterparts
+        // Map key and value back to their technical counterparts.
+        // The parser already strips the "not:" prefix from seg.value and sets
+        // seg.negated = true, so we use seg.negated directly.
         let technicalValue = seg.value
-        let negated = false
+        const negated = !!(seg.negated && def.negatable)
 
-        if (def.negatable) {
-          const localNot = negationLabel.toLowerCase() + ':'
-          const vLower = seg.value.toLowerCase()
-          if (vLower.startsWith(localNot)) {
-            technicalValue = seg.value.slice(localNot.length)
-            negated = true
-          } else if (vLower.startsWith('not:')) {
-            technicalValue = seg.value.slice(4)
-            negated = true
-          }
-          if (negated) {
-            if (
-              (technicalValue.startsWith('"') && technicalValue.endsWith('"')) ||
-              (technicalValue.startsWith(sQuote) && technicalValue.endsWith(sQuote))
-            ) {
-              technicalValue = technicalValue.slice(1, -1)
-            }
-          }
+        // Strip surrounding quotes from the value if present
+        if (
+          (technicalValue.startsWith('"') &&
+            technicalValue.endsWith('"')) ||
+          (technicalValue.startsWith(sQuote) &&
+            technicalValue.endsWith(sQuote))
+        ) {
+          technicalValue = technicalValue.slice(1, -1)
         }
 
         const valMap = optionValueMapRef.current.get(def.key.toLowerCase())
@@ -1346,7 +1414,9 @@ function TokenizedSearchBase<K extends string = string>({
       .startsWith(`${localNot}:`)
     const notPrefix = isNegated ? `${negationLabel}:` : ''
     const isTypedValue = option.id === '__typed_value__'
-    const insertionVal = isTypedValue ? option.value.replace(/^"|"$/g, '') : (option.label ?? option.value)
+    const insertionVal = isTypedValue
+      ? option.value.replace(/^"|"$/g, '')
+      : (option.label ?? option.value)
     const escapedVal = isTypedValue
       ? `"${insertionVal}"`
       : insertionVal.includes(' ')
@@ -1558,8 +1628,7 @@ function TokenizedSearchBase<K extends string = string>({
       effectiveFilterQuery &&
       !isStrictValue &&
       !filtered.some(
-        (opt) =>
-          opt.value.toLowerCase() === effectiveFilterQuery.toLowerCase(),
+        (opt) => opt.value.toLowerCase() === effectiveFilterQuery.toLowerCase(),
       )
     ) {
       filtered = [
@@ -1583,7 +1652,14 @@ function TokenizedSearchBase<K extends string = string>({
     }
 
     return filtered
-  }, [rawOptions, filterQuery, usedValues, currentTokenDef, dropdownContext, isStrictValue])
+  }, [
+    rawOptions,
+    filterQuery,
+    usedValues,
+    currentTokenDef,
+    dropdownContext,
+    isStrictValue,
+  ])
 
   const isDropdownVisible =
     dropdownContext !== null &&
@@ -1632,6 +1708,16 @@ function TokenizedSearchBase<K extends string = string>({
         case 'Enter': {
           const target = getTarget()
           if (target) {
+            // For typed values (no real option selected), close the
+            // dropdown and fall through to handleSubmit so the search
+            // fires immediately.  Without this, editing inside an
+            // existing token value and pressing Enter would only
+            // re-insert the same text without triggering onSearch.
+            if (target.id === '__typed_value__') {
+              selectOption(target)
+              handleSubmit()
+              return
+            }
             event.preventDefault()
             selectOption(target)
             return

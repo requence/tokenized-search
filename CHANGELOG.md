@@ -1,5 +1,11 @@
 # @requence/tokenized-search
 
+## 1.1.3
+
+### Patch Changes
+
+- [`3a3d2f1`](https://github.com/requence/tokenized-search/commit/3a3d2f1a077dab8221f9312bdd91cf8b6b736550) Thanks [@Torsten85](https://github.com/Torsten85)! - Fix `parseTokenizedSearch` not recognizing the `not:` negation prefix when parsing raw text. Previously, `name:not:"test"` was parsed as `{ value: 'not:"test"' }` instead of `{ value: "test", negated: true }`. This caused URL-persisted search params with negated tokens to lose their negation on page reload.
+
 ## 1.1.2
 
 ### Patch Changes

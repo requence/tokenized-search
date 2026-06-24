@@ -105,8 +105,19 @@ export function parseTokenizedSearch<K extends string>(
       continue
     }
 
-    // Find value end — next space or end of string, respecting quotes
+    // Find value end — next space or end of string, respecting quotes and not: prefix
     let valueEnd = colonIndex + 1
+
+    // Skip a `not:` negation prefix if present
+    let hasNot = false
+    if (
+      text.slice(valueEnd, valueEnd + 4).toLowerCase() === 'not:' &&
+      valueEnd + 4 <= text.length
+    ) {
+      hasNot = true
+      valueEnd += 4
+    }
+
     if (
       valueEnd < text.length &&
       (text[valueEnd] === '"' || text[valueEnd] === sQuote)
@@ -125,7 +136,7 @@ export function parseTokenizedSearch<K extends string>(
       }
     }
 
-    let value = text.slice(colonIndex + 1, valueEnd)
+    let value = text.slice(colonIndex + 1 + (hasNot ? 4 : 0), valueEnd)
     if (value.startsWith('"') && value.endsWith('"')) {
       value = value.slice(1, -1)
     } else if (value.startsWith(sQuote) && value.endsWith(sQuote)) {
@@ -146,6 +157,7 @@ export function parseTokenizedSearch<K extends string>(
       type: 'token',
       key,
       value,
+      ...(hasNot ? { negated: true } : {}),
       start: keyStart,
       end: valueEnd,
     })

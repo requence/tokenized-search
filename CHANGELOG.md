@@ -1,5 +1,11 @@
 # @requence/tokenized-search
 
+## 1.1.1
+
+### Patch Changes
+
+- [`ad793c5`](https://github.com/requence/tokenized-search/commit/ad793c5c405ee31b791b7a9ca46e019905ee9bda) Thanks [@Torsten85](https://github.com/Torsten85)! - Fix double-quoting of typed values in non-strict token dropdown. Quotes around typed-value options are now render-only in the dropdown display, with a single consistent quote-wrap applied on insertion. Surrounding quotes typed by the user are stripped before wrapping to prevent `name:"abc""` when the user already closed the quote.
+
 ## 1.1.0
 
 ### Minor Changes

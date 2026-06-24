@@ -1,5 +1,18 @@
 # @requence/tokenized-search
 
+## 1.2.0
+
+### Minor Changes
+
+- [`7164443`](https://github.com/requence/tokenized-search/commit/716444376a5dbd63cf26dab91795c6e61ce4c4dd) Thanks [@Torsten85](https://github.com/Torsten85)! - Add async token value resolution. When text containing async token labels
+  is pasted or loaded on a fresh page (e.g. `Reference:Gekko-Co`), the
+  component now automatically calls the token's `options()` function to
+  resolve display labels back to their technical values. Submit is disabled
+  with `aria-busy` during resolution to prevent emitting unresolved values.
+  The `id` field on `TokenSegment` distinguishes resolved options from
+  free-text input. Also adds the `optionValueMap` cache parameter to
+  `toTechnicalQuery` for consistent resolution across all code paths.
+
 ## 1.1.4
 
 ### Patch Changes

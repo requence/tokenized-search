@@ -1,5 +1,11 @@
 # @requence/tokenized-search
 
+## 1.2.1
+
+### Patch Changes
+
+- a351e4b: fixed negation label
+
 ## 1.2.0
 
 ### Minor Changes

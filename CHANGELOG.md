@@ -1,5 +1,11 @@
 # @requence/tokenized-search
 
+## 1.2.2
+
+### Patch Changes
+
+- c416840: fix spacing
+
 ## 1.2.1
 
 ### Patch Changes

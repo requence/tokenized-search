@@ -518,8 +518,8 @@ function TokenizedSearchBase<K extends string = string>({
   const lastSubmittedRef = useRef<string | null>(null)
   const [submittedQuery, setSubmittedQuery] = useState<string>(() =>
     toTechnicalQuery(
-      defaultValue ?? controlledValue ?? '',
-      (rawTokens ?? []).filter(Boolean) as TokenizedSearchTokenDefinition<K>[],
+      value,
+      tokens,
       negationLabel,
     ).trim(),
   )

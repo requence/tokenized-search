@@ -1,5 +1,11 @@
 # @requence/tokenized-search
 
+## 1.2.3
+
+### Patch Changes
+
+- 0550b1b: fixed token tracking in controlled mode
+
 ## 1.2.2
 
 ### Patch Changes

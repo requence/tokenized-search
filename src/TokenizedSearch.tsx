@@ -315,7 +315,10 @@ function applyTokenMarks(
       const negStart = seg.start + seg.key.length + 1 // after "key:"
       const canonicalNot = negationLabel + ':'
       const actualNot = text.slice(negStart, negStart + canonicalNot.length)
-      if (actualNot.toLowerCase() === canonicalNot.toLowerCase() && actualNot !== canonicalNot) {
+      if (
+        actualNot.toLowerCase() === canonicalNot.toLowerCase() &&
+        actualNot !== canonicalNot
+      ) {
         const negFrom = from + negStart
         const negTo = from + negStart + actualNot.length
         tr.insertText(canonicalNot, negFrom, negTo)
@@ -355,11 +358,7 @@ function applyTokenMarks(
       )
       const tokenNegationType = editor.schema.marks.tokenNegation
       const localNot = negationLabel.toLowerCase() + ':'
-      if (
-        seg.negated &&
-        def?.negatable &&
-        tokenNegationType
-      ) {
+      if (seg.negated && def?.negatable && tokenNegationType) {
         const negEnd = keyEnd + localNot.length
         tr.addMark(from + keyEnd, from + negEnd, tokenNegationType.create())
         if (tokenValueType && seg.value.length > 0) {
@@ -409,20 +408,33 @@ function applyTokenMarks(
  * Ensure a space follows every recognized token value in the text.
  * Prevents the cursor from getting stuck inside a token.
  */
-function ensureTokenSpacing(text: string, tokenKeys: string[], negationLabel: string): string {
+function ensureTokenSpacing(
+  text: string,
+  tokenKeys: string[],
+  negationLabel: string,
+): string {
   const segments = parseTokenizedSearch(text, tokenKeys, negationLabel)
   let result = ''
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]
     if (seg.type === 'token') {
       result += text.slice(seg.start, seg.end)
-      // Check if a space already follows
+      // Always ensure a non-breaking space (\u00A0) follows the token.
+      // Regular spaces get collapsed when injected as HTML via setContent,
+      // so only \u00A0 is safe to prevent the cursor from landing inside a token on focus.
       const charAfter = text[seg.end]
-      if (charAfter !== ' ' && charAfter !== '\u00A0') {
+      if (charAfter !== '\u00A0') {
         result += '\u00A0'
       }
     } else {
-      result += seg.text
+      let segText = seg.text
+      // If this text segment follows a token and starts with a regular space,
+      // skip it — we already added a \u00A0 above to replace it.
+      const prevSeg = i > 0 ? segments[i - 1] : undefined
+      if (prevSeg?.type === 'token' && segText.startsWith(' ')) {
+        segText = segText.slice(1)
+      }
+      result += segText
     }
   }
   return result
@@ -671,12 +683,24 @@ function TokenizedSearchBase<K extends string = string>({
         return
       }
 
-      let ctx = getCursorContext<K>(text, cursorPos, tokenKeysAndLabels, negationLabel)
+      let ctx = getCursorContext<K>(
+        text,
+        cursorPos,
+        tokenKeysAndLabels,
+        negationLabel,
+      )
 
       // Suppress dropdown for duplicate exclusive keys
       if (ctx?.mode === 'value') {
         if (
-          isExclusiveDuplicate(ctx, text, cursorPos, tokenKeysAndLabels, tokens, negationLabel)
+          isExclusiveDuplicate(
+            ctx,
+            text,
+            cursorPos,
+            tokenKeysAndLabels,
+            tokens,
+            negationLabel,
+          )
         ) {
           ctx = null
         }
@@ -732,11 +756,23 @@ function TokenizedSearchBase<K extends string = string>({
         return
       }
 
-      let ctx = getCursorContext<K>(text, cursorPos, tokenKeysAndLabels, negationLabel)
+      let ctx = getCursorContext<K>(
+        text,
+        cursorPos,
+        tokenKeysAndLabels,
+        negationLabel,
+      )
 
       if (ctx?.mode === 'value') {
         if (
-          isExclusiveDuplicate(ctx, text, cursorPos, tokenKeysAndLabels, tokens, negationLabel)
+          isExclusiveDuplicate(
+            ctx,
+            text,
+            cursorPos,
+            tokenKeysAndLabels,
+            tokens,
+            negationLabel,
+          )
         ) {
           ctx = null
         }
@@ -1004,7 +1040,8 @@ function TokenizedSearchBase<K extends string = string>({
 
       const oldMatch = oldTokenDefsMap.get(seg.key.toLowerCase())
       if (!oldMatch) {
-        newText += `${seg.key}:${seg.value}`
+        const fallbackNeg = seg.negated ? `${negationLabel}:` : ''
+        newText += `${seg.key}:${fallbackNeg}${seg.value}`
         continue
       }
 
@@ -1015,7 +1052,8 @@ function TokenizedSearchBase<K extends string = string>({
         (t) => t.key.toLowerCase() === oldDef.key.toLowerCase(),
       )
       if (!newDef) {
-        newText += `${seg.key}:${seg.value}`
+        const fallbackNeg = seg.negated ? `${negationLabel}:` : ''
+        newText += `${seg.key}:${fallbackNeg}${seg.value}`
         continue
       }
 
@@ -1030,11 +1068,14 @@ function TokenizedSearchBase<K extends string = string>({
         }
       }
 
+      const negPrefix =
+        seg.negated && newDef.negatable ? `${negationLabel}:` : ''
+
       const escapedNewValue = newValueString.includes(' ')
         ? `"${newValueString}"`
         : newValueString
 
-      newText += `${newKeyString}:${escapedNewValue}`
+      newText += `${newKeyString}:${negPrefix}${escapedNewValue}`
     }
 
     if (newText !== currentText) {
@@ -1072,7 +1113,11 @@ function TokenizedSearchBase<K extends string = string>({
 
   const computeSegments = useCallback(
     (text: string): TokenizedSearchSegment<K>[] => {
-      const raw = parseTokenizedSearch<K>(text, tokenKeysAndLabels, negationLabel)
+      const raw = parseTokenizedSearch<K>(
+        text,
+        tokenKeysAndLabels,
+        negationLabel,
+      )
       const validIndices = getValidTokenIndices(
         raw,
         tokens,
@@ -1134,10 +1179,8 @@ function TokenizedSearchBase<K extends string = string>({
 
         // Strip surrounding quotes from the value if present
         if (
-          (technicalValue.startsWith('"') &&
-            technicalValue.endsWith('"')) ||
-          (technicalValue.startsWith(sQuote) &&
-            technicalValue.endsWith(sQuote))
+          (technicalValue.startsWith('"') && technicalValue.endsWith('"')) ||
+          (technicalValue.startsWith(sQuote) && technicalValue.endsWith(sQuote))
         ) {
           technicalValue = technicalValue.slice(1, -1)
         }
@@ -1184,7 +1227,10 @@ function TokenizedSearchBase<K extends string = string>({
 
   useEffect(() => {
     // Find token segments that need resolution
-    const unresolvedPairs: { def: TokenizedSearchTokenDefinition<K>; displayValue: string }[] = []
+    const unresolvedPairs: {
+      def: TokenizedSearchTokenDefinition<K>
+      displayValue: string
+    }[] = []
 
     for (const seg of segments) {
       if (seg.type !== 'token') continue
@@ -1487,7 +1533,12 @@ function TokenizedSearchBase<K extends string = string>({
           negationLabel,
         )
         suppressUpdateRef.current = false
-        const ctx = getCursorContext<K>(next, cursorPos - 1, tokenKeysAndLabels, negationLabel)
+        const ctx = getCursorContext<K>(
+          next,
+          cursorPos - 1,
+          tokenKeysAndLabels,
+          negationLabel,
+        )
         setDropdownContext(ctx)
       })
       return
@@ -1522,7 +1573,12 @@ function TokenizedSearchBase<K extends string = string>({
           negationLabel,
         )
         suppressUpdateRef.current = false
-        const ctx = getCursorContext<K>(next, cursorPos - 1, tokenKeysAndLabels, negationLabel)
+        const ctx = getCursorContext<K>(
+          next,
+          cursorPos - 1,
+          tokenKeysAndLabels,
+          negationLabel,
+        )
         setDropdownContext(ctx)
       })
       return
@@ -1582,7 +1638,11 @@ function TokenizedSearchBase<K extends string = string>({
       const text = editor.getText()
       const { key, replaceStart } = dropdownContext
 
-      const segmentsList = parseTokenizedSearch<K>(text, tokenKeysAndLabels, negationLabel)
+      const segmentsList = parseTokenizedSearch<K>(
+        text,
+        tokenKeysAndLabels,
+        negationLabel,
+      )
       const currentSegment = segmentsList.find(
         (s) => s.type === 'token' && s.start === replaceStart,
       )
@@ -1884,7 +1944,12 @@ function TokenizedSearchBase<K extends string = string>({
 
   const handleSubmit = useEffectEvent(() => {
     suppressFocusRef.current = true
-    const technicalQuery = toTechnicalQuery(value, tokens, negationLabel, optionValueMapRef.current).trim()
+    const technicalQuery = toTechnicalQuery(
+      value,
+      tokens,
+      negationLabel,
+      optionValueMapRef.current,
+    ).trim()
     if (technicalQuery !== lastSubmittedRef.current) {
       lastSubmittedRef.current = technicalQuery
       setSubmittedQuery(technicalQuery)
@@ -1919,7 +1984,13 @@ function TokenizedSearchBase<K extends string = string>({
   })
 
   const currentTechnicalQuery = useMemo(
-    () => toTechnicalQuery(value, tokens, negationLabel, optionValueMapRef.current).trim(),
+    () =>
+      toTechnicalQuery(
+        value,
+        tokens,
+        negationLabel,
+        optionValueMapRef.current,
+      ).trim(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [value, tokens, negationLabel, resolveGeneration],
   )

@@ -152,7 +152,17 @@ aria-selected:bg-zinc-700/80 aria-selected:text-white
 
 ### `<DropdownNotOption>`
 
-Styles the "Not" option shown for negatable tokens. Works identically to `<DropdownOption>`:
+Styles the "Not" option shown for negatable tokens and optionally sets the negation label. Pass the label text as `children` (defaults to `"not"`):
+
+```tsx
+<TokenizedSearch.DropdownNotOption
+  className="text-zinc-500 aria-selected:bg-zinc-700/80 aria-selected:text-white"
+>
+  nicht
+</TokenizedSearch.DropdownNotOption>
+```
+
+If no `children` are provided, the label defaults to `"not"`:
 
 ```tsx
 <TokenizedSearch.DropdownNotOption

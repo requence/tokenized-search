@@ -97,11 +97,6 @@ export interface TokenizedSearchProps<K extends string = string> {
   /** Ref exposing imperative methods like submit() */
   ref?: React.Ref<TokenizedSearchHandle>
   autoFocus?: boolean
-  /**
-   * Localized label for the negation prefix shown for `negatable` tokens
-   * (e.g., "not" in EN, "nicht" in DE). Defaults to `"not"`.
-   */
-  negationLabel?: string
   /** Compound sub-components for styling and content */
   children?: ReactNode
 }

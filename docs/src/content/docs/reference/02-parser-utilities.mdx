@@ -18,10 +18,11 @@ const segments = parseTokenizedSearch<'status' | 'source'>(
 
 ### Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `rawText` | `string` | The raw search query |
-| `tokenKeys` | `string[]` | Recognized token key names (and labels) |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `rawText` | `string` | — | The raw search query |
+| `tokenKeys` | `string[]` | — | Recognized token key names (and labels) |
+| `negationLabel` | `string` | `'not'` | Negation prefix for detecting negated tokens |
 
 ### Returns
 

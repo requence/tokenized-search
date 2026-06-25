@@ -77,10 +77,12 @@ export function splitTextByQuotes(text: string): string[] {
 export function parseTokenizedSearch<K extends string>(
   rawText: string,
   tokenKeys: string[],
+  negationLabel: string = 'not',
 ): TokenizedSearchSegment<K>[] {
   const text = rawText.replace(/\u00A0/g, ' ')
   const segments: TokenizedSearchSegment<K>[] = []
   const keySet = new Set(tokenKeys.map((k) => k.toLowerCase()))
+  const notPrefix = negationLabel.toLowerCase() + ':'
 
   let i = 0
   let plainStart = 0
@@ -105,17 +107,17 @@ export function parseTokenizedSearch<K extends string>(
       continue
     }
 
-    // Find value end — next space or end of string, respecting quotes and not: prefix
+    // Find value end — next space or end of string, respecting quotes and negation prefix
     let valueEnd = colonIndex + 1
 
-    // Skip a `not:` negation prefix if present
+    // Skip the negation prefix if present
     let hasNot = false
     if (
-      text.slice(valueEnd, valueEnd + 4).toLowerCase() === 'not:' &&
-      valueEnd + 4 <= text.length
+      text.slice(valueEnd, valueEnd + notPrefix.length).toLowerCase() === notPrefix &&
+      valueEnd + notPrefix.length <= text.length
     ) {
       hasNot = true
-      valueEnd += 4
+      valueEnd += notPrefix.length
     }
 
     if (
@@ -136,7 +138,7 @@ export function parseTokenizedSearch<K extends string>(
       }
     }
 
-    let value = text.slice(colonIndex + 1 + (hasNot ? 4 : 0), valueEnd)
+    let value = text.slice(colonIndex + 1 + (hasNot ? notPrefix.length : 0), valueEnd)
     if (value.startsWith('"') && value.endsWith('"')) {
       value = value.slice(1, -1)
     } else if (value.startsWith(sQuote) && value.endsWith(sQuote)) {

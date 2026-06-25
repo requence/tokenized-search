@@ -18,7 +18,7 @@ export interface ResolvedTextSlot {
 export interface ResolvedDropdownSlot {
   className?: string
   option?: string
-  notOption?: string
+  notOption?: ResolvedTextSlot
   separator?: string
   highlightMatch?: string
   filterByLabel?: ResolvedTextSlot
@@ -118,7 +118,10 @@ export function collectSlots(children: ReactNode): ResolvedSlots {
               result.dropdown.option = ddChildProps.className
               break
             case 'TokenizedSearch.DropdownNotOption':
-              result.dropdown.notOption = ddChildProps.className
+              result.dropdown.notOption = {
+                className: ddChildProps.className,
+                children: ddChildProps.children,
+              }
               break
             case 'TokenizedSearch.DropdownSeparator':
               result.dropdown.separator = ddChildProps.className

@@ -109,9 +109,10 @@ function getCursorContext<K extends string>(
   rawText: string,
   cursorPos: number,
   tokenKeys: string[],
+  negationLabel: string,
 ): DropdownContext<K> | null {
   const text = rawText.replace(/\u00A0/g, ' ')
-  const segments = parseTokenizedSearch<K>(text, tokenKeys)
+  const segments = parseTokenizedSearch<K>(text, tokenKeys, negationLabel)
 
   // Find which segment the cursor is inside
   const seg = segments.find((s) => s.start <= cursorPos && cursorPos <= s.end)
@@ -163,6 +164,7 @@ function isExclusiveDuplicate<K extends string>(
   cursorPos: number,
   tokenKeys: string[],
   tokenDefs: readonly TokenizedSearchTokenDefinition<string>[],
+  negationLabel: string,
 ): boolean {
   const key = ctx.key.toLowerCase()
   const def = tokenDefs.find(
@@ -176,7 +178,7 @@ function isExclusiveDuplicate<K extends string>(
   const defKeyLower = def.key.toLowerCase()
   const defLabelLower = def.label?.toLowerCase()
 
-  return parseTokenizedSearch(text, tokenKeys).some((s) => {
+  return parseTokenizedSearch(text, tokenKeys, negationLabel).some((s) => {
     if (s.type !== 'token') {
       return false
     }
@@ -265,7 +267,7 @@ function applyTokenMarks(
   }
 
   const text = editor.getText()
-  const segments = parseTokenizedSearch(text, tokenKeys)
+  const segments = parseTokenizedSearch(text, tokenKeys, negationLabel)
   const validIndices = getValidTokenIndices(
     segments,
     tokenDefs,
@@ -307,20 +309,16 @@ function applyTokenMarks(
       continue
     }
 
-    // Correct negation prefix casing (e.g. "Not:" → "not:")
+    // Correct negation prefix casing (e.g. "Not:" → "not:", "Nicht:" → "nicht:")
     // Must run before key correction since it uses positions relative to current key length
     if (seg.negated && def.negatable) {
       const negStart = seg.start + seg.key.length + 1 // after "key:"
       const canonicalNot = negationLabel + ':'
-      // The parser detected "not:" (4 chars) case-insensitively
-      const actualNot = text.slice(negStart, negStart + 4)
-      if (actualNot.toLowerCase() === 'not:' && actualNot !== canonicalNot) {
+      const actualNot = text.slice(negStart, negStart + canonicalNot.length)
+      if (actualNot.toLowerCase() === canonicalNot.toLowerCase() && actualNot !== canonicalNot) {
         const negFrom = from + negStart
-        const negTo = from + negStart + 4
+        const negTo = from + negStart + actualNot.length
         tr.insertText(canonicalNot, negFrom, negTo)
-        // Adjust segment end if canonical negation label differs in length
-        const negLenDiff = canonicalNot.length - 4
-        seg.end += negLenDiff
       }
     }
 
@@ -411,8 +409,8 @@ function applyTokenMarks(
  * Ensure a space follows every recognized token value in the text.
  * Prevents the cursor from getting stuck inside a token.
  */
-function ensureTokenSpacing(text: string, tokenKeys: string[]): string {
-  const segments = parseTokenizedSearch(text, tokenKeys)
+function ensureTokenSpacing(text: string, tokenKeys: string[], negationLabel: string): string {
+  const segments = parseTokenizedSearch(text, tokenKeys, negationLabel)
   let result = ''
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]
@@ -443,10 +441,13 @@ function TokenizedSearchBase<K extends string = string>({
   onKeyDown: onKeyDownProp,
   ref,
   autoFocus,
-  negationLabel = 'not',
   children,
 }: TokenizedSearchProps<K>) {
   const slotConfig = collectSlots(children)
+  const negationLabel =
+    (typeof slotConfig.dropdown.notOption?.children === 'string'
+      ? slotConfig.dropdown.notOption.children
+      : undefined) ?? 'not'
   const isControlled = controlledValue !== undefined
   const tokens = useMemo(
     () => rawTokens.filter(Boolean) as TokenizedSearchTokenDefinition<K>[],
@@ -464,7 +465,7 @@ function TokenizedSearchBase<K extends string = string>({
   }, [tokens])
   const initialLocalValue = useMemo(() => {
     const display = toDisplayQuery(defaultValue, tokens, negationLabel)
-    return ensureTokenSpacing(display, tokenKeysAndLabels)
+    return ensureTokenSpacing(display, tokenKeysAndLabels, negationLabel)
   }, [defaultValue, tokens, negationLabel, tokenKeysAndLabels])
   const [internalValue, setInternalValue] = useState(initialLocalValue)
   const value = isControlled ? controlledValue : internalValue
@@ -670,12 +671,12 @@ function TokenizedSearchBase<K extends string = string>({
         return
       }
 
-      let ctx = getCursorContext<K>(text, cursorPos, tokenKeysAndLabels)
+      let ctx = getCursorContext<K>(text, cursorPos, tokenKeysAndLabels, negationLabel)
 
       // Suppress dropdown for duplicate exclusive keys
       if (ctx?.mode === 'value') {
         if (
-          isExclusiveDuplicate(ctx, text, cursorPos, tokenKeysAndLabels, tokens)
+          isExclusiveDuplicate(ctx, text, cursorPos, tokenKeysAndLabels, tokens, negationLabel)
         ) {
           ctx = null
         }
@@ -731,11 +732,11 @@ function TokenizedSearchBase<K extends string = string>({
         return
       }
 
-      let ctx = getCursorContext<K>(text, cursorPos, tokenKeysAndLabels)
+      let ctx = getCursorContext<K>(text, cursorPos, tokenKeysAndLabels, negationLabel)
 
       if (ctx?.mode === 'value') {
         if (
-          isExclusiveDuplicate(ctx, text, cursorPos, tokenKeysAndLabels, tokens)
+          isExclusiveDuplicate(ctx, text, cursorPos, tokenKeysAndLabels, tokens, negationLabel)
         ) {
           ctx = null
         }
@@ -878,6 +879,7 @@ function TokenizedSearchBase<K extends string = string>({
       const localValue = ensureTokenSpacing(
         toDisplayQuery(defaultValue, tokens, negationLabel),
         tokenKeysAndLabels,
+        negationLabel,
       )
       const currentText = editor.getText().replace(/\u00A0/g, ' ')
       if (currentText !== localValue) {
@@ -990,6 +992,7 @@ function TokenizedSearchBase<K extends string = string>({
     const oldSegments = parseTokenizedSearch<K>(
       currentText,
       oldTokenKeysAndLabels,
+      negationLabel,
     )
 
     let newText = ''
@@ -1069,7 +1072,7 @@ function TokenizedSearchBase<K extends string = string>({
 
   const computeSegments = useCallback(
     (text: string): TokenizedSearchSegment<K>[] => {
-      const raw = parseTokenizedSearch<K>(text, tokenKeysAndLabels)
+      const raw = parseTokenizedSearch<K>(text, tokenKeysAndLabels, negationLabel)
       const validIndices = getValidTokenIndices(
         raw,
         tokens,
@@ -1289,7 +1292,7 @@ function TokenizedSearchBase<K extends string = string>({
     }
 
     const usedKeys = new Set(
-      parseTokenizedSearch(value, tokenKeysAndLabels)
+      parseTokenizedSearch(value, tokenKeysAndLabels, negationLabel)
         .filter((s): s is TokenSegment<K> => s.type === 'token')
         .map((s) => {
           const def = tokens.find(
@@ -1484,7 +1487,7 @@ function TokenizedSearchBase<K extends string = string>({
           negationLabel,
         )
         suppressUpdateRef.current = false
-        const ctx = getCursorContext<K>(next, cursorPos - 1, tokenKeysAndLabels)
+        const ctx = getCursorContext<K>(next, cursorPos - 1, tokenKeysAndLabels, negationLabel)
         setDropdownContext(ctx)
       })
       return
@@ -1519,7 +1522,7 @@ function TokenizedSearchBase<K extends string = string>({
           negationLabel,
         )
         suppressUpdateRef.current = false
-        const ctx = getCursorContext<K>(next, cursorPos - 1, tokenKeysAndLabels)
+        const ctx = getCursorContext<K>(next, cursorPos - 1, tokenKeysAndLabels, negationLabel)
         setDropdownContext(ctx)
       })
       return
@@ -1579,7 +1582,7 @@ function TokenizedSearchBase<K extends string = string>({
       const text = editor.getText()
       const { key, replaceStart } = dropdownContext
 
-      const segmentsList = parseTokenizedSearch<K>(text, tokenKeysAndLabels)
+      const segmentsList = parseTokenizedSearch<K>(text, tokenKeysAndLabels, negationLabel)
       const currentSegment = segmentsList.find(
         (s) => s.type === 'token' && s.start === replaceStart,
       )
@@ -1669,7 +1672,7 @@ function TokenizedSearchBase<K extends string = string>({
     const defLabelLower = def.label?.toLowerCase()
 
     return new Set(
-      parseTokenizedSearch(value, tokenKeysAndLabels)
+      parseTokenizedSearch(value, tokenKeysAndLabels, negationLabel)
         .filter((s): s is TokenSegment<K> => {
           if (s.type !== 'token') {
             return false
@@ -1760,11 +1763,11 @@ function TokenizedSearchBase<K extends string = string>({
       dropdownContext?.mode === 'value'
     ) {
       filtered = [
-        ...filtered,
         {
           value: '__not__',
           label: negationLabel,
         },
+        ...filtered,
       ]
     }
 
@@ -2036,6 +2039,7 @@ function TokenizedSearchBase<K extends string = string>({
                   const segmentsList = parseTokenizedSearch<K>(
                     editor.getText(),
                     tokenKeysAndLabels,
+                    negationLabel,
                   )
                   const seg = segmentsList.find(
                     (s) =>
@@ -2085,14 +2089,6 @@ function TokenizedSearchBase<K extends string = string>({
                 {activeOptions.map((option, index) =>
                   option.value === '__not__' ? (
                     <Fragment key="__not__">
-                      {index > 0 && (
-                        <hr
-                          className={twMerge(
-                            'my-1 border-gray-200',
-                            slotConfig.dropdown.separator,
-                          )}
-                        />
-                      )}
                       <button
                         type="button"
                         tabIndex={-1}
@@ -2103,7 +2099,7 @@ function TokenizedSearchBase<K extends string = string>({
                         aria-selected={highlighted === index}
                         className={twMerge(
                           'flex w-full cursor-pointer items-center rounded-sm px-2 py-1 text-left text-xs italic outline-none transition-colors duration-75',
-                          slotConfig.dropdown.notOption,
+                          slotConfig.dropdown.notOption?.className,
                         )}
                       >
                         <HighlightMatch
@@ -2112,6 +2108,14 @@ function TokenizedSearchBase<K extends string = string>({
                           className={slotConfig.dropdown.highlightMatch}
                         />
                       </button>
+                      {index < activeOptions.length - 1 && (
+                        <hr
+                          className={twMerge(
+                            'my-1 border-gray-200',
+                            slotConfig.dropdown.separator,
+                          )}
+                        />
+                      )}
                     </Fragment>
                   ) : (
                     <button

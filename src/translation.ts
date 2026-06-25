@@ -15,7 +15,7 @@ export function toTechnicalQuery(
     t.key,
     ...(t.label ? [t.label] : []),
   ])
-  const rawSegments = parseTokenizedSearch<string>(rawText, tokenKeysAndLabels)
+  const rawSegments = parseTokenizedSearch<string>(rawText, tokenKeysAndLabels, negationLabel)
 
   let technicalText = ''
   for (const seg of rawSegments) {
@@ -84,7 +84,7 @@ export function toDisplayQuery(
     return ''
   }
   const technicalKeys = tokens.map((t) => t.key)
-  const rawSegments = parseTokenizedSearch<string>(technicalText, technicalKeys)
+  const rawSegments = parseTokenizedSearch<string>(technicalText, technicalKeys, 'not')
 
   let displayText = ''
   for (const seg of rawSegments) {

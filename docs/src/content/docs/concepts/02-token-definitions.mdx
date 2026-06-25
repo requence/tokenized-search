@@ -92,10 +92,14 @@ Enable negation with `negatable: true`. A "Not" option appears in the value drop
 { key: 'status', negatable: true, options: [...] }
 ```
 
-Customize the negation label for i18n with the `negationLabel` prop on the component:
+Customize the negation label for i18n via the `<DropdownNotOption>` slot:
 
 ```tsx
-<TokenizedSearch negationLabel="nicht" ... />
+<TokenizedSearch tokens={tokens} onSearch={handleSearch}>
+  <TokenizedSearch.Dropdown>
+    <TokenizedSearch.DropdownNotOption>nicht</TokenizedSearch.DropdownNotOption>
+  </TokenizedSearch.Dropdown>
+</TokenizedSearch>
 ```
 
 ## Custom Dropdowns

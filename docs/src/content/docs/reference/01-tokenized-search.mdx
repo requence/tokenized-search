@@ -23,7 +23,6 @@ import { TokenizedSearch } from '@requence/tokenized-search'
 | `onKeyDown` | `(event) => void` | — | Key handler (when dropdown is closed) |
 | `ref` | `Ref<TokenizedSearchHandle>` | — | Imperative handle |
 | `autoFocus` | `boolean` | `false` | Auto-focus on mount |
-| `negationLabel` | `string` | `'not'` | Negation prefix label for i18n |
 | `children` | `ReactNode` | — | Slot sub-components for styling |
 
 ## Imperative Handle
@@ -76,7 +75,7 @@ Must be children of `<Dropdown>`.
 | Slot | `className` | `children` | Description |
 |------|-------------|------------|-------------|
 | `<DropdownOption>` | Option styling | — | Regular dropdown option (`aria-selected:` for highlight) |
-| `<DropdownNotOption>` | Option styling | — | "Not" option for negatable tokens (`aria-selected:` for highlight) |
+| `<DropdownNotOption>` | Option styling | Negation label (default `"not"`) | "Not" option for negatable tokens (`aria-selected:` for highlight) |
 | `<DropdownSeparator>` | Border/divider styling | — | Separator between options and "Not" option |
 | `<HighlightMatch>` | Text color | — | Matched substring within options |
 | `<FilterByLabel>` | Text styling | Label text (e.g. "Filter by") | Header above key suggestions |

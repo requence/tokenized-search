@@ -1,6 +1,6 @@
 import type {
-  TokenizedSearchTokenDefinition,
   TokenOption,
+  TokenizedSearchTokenDefinition,
 } from '@requence/tokenized-search'
 
 // ── Reference data (50 name / UUID pairs) ────────────────────────────
@@ -95,11 +95,15 @@ export const tokens: TokenizedSearchTokenDefinition[] = [
     key: 'name',
     label: 'Name',
     negatable: true,
+    exclusive: true,
   },
   {
     key: 'reference',
     label: 'Reference',
-    options: async (query: string, signal: AbortSignal): Promise<TokenOption[]> => {
+    options: async (
+      query: string,
+      signal: AbortSignal,
+    ): Promise<TokenOption[]> => {
       // Simulate async fetch with a short delay
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, 400)

@@ -465,7 +465,7 @@ function TokenizedSearchBase<K extends string = string>({
     () => rawTokens.filter(Boolean) as TokenizedSearchTokenDefinition<K>[],
     [rawTokens],
   )
-  const tokenKeysAndLabels = useMemo(() => {
+  const tokenKeysAndLabelsKey = useMemo(() => {
     const result: string[] = []
     for (const t of tokens) {
       result.push(t.key)
@@ -473,14 +473,34 @@ function TokenizedSearchBase<K extends string = string>({
         result.push(t.label)
       }
     }
-    return result
+    return result.join('\0')
   }, [tokens])
+  const tokenKeysAndLabels = useMemo(
+    () => tokenKeysAndLabelsKey.split('\0'),
+    [tokenKeysAndLabelsKey],
+  )
   const initialLocalValue = useMemo(() => {
-    const display = toDisplayQuery(defaultValue, tokens, negationLabel)
+    const source = isControlled ? (controlledValue ?? '') : defaultValue
+    const display = isControlled
+      ? source
+      : toDisplayQuery(source, tokens, negationLabel)
     return ensureTokenSpacing(display, tokenKeysAndLabels, negationLabel)
-  }, [defaultValue, tokens, negationLabel, tokenKeysAndLabels])
+  }, [
+    defaultValue,
+    controlledValue,
+    isControlled,
+    tokens,
+    negationLabel,
+    tokenKeysAndLabels,
+  ])
   const [internalValue, setInternalValue] = useState(initialLocalValue)
   const value = isControlled ? controlledValue : internalValue
+
+  // Always tracks the current editor text, regardless of controlled/uncontrolled mode.
+  // Used for dropdown filtering (usedKeys, usedValues) so that exclusive token keys
+  // are correctly shown/hidden based on what the user has actually typed, not the
+  // stale controlled value that only updates on submit.
+  const [editorText, setEditorText] = useState(initialLocalValue)
 
   const [highlighted, setHighlighted] = useState(-1)
   const [options, setOptions] = useState<TokenOption[]>([])
@@ -545,15 +565,15 @@ function TokenizedSearchBase<K extends string = string>({
   }
 
   const tokenKeyClass = twMerge(
-    'rounded-l py-0.5 pl-1 pr-0.5 font-semibold text-blue-600',
+    'rounded-l py-0.5 pl-1 font-semibold text-blue-600',
     slotConfig.input.tokenKey,
   )
   const tokenValueClass = twMerge(
-    'rounded-r py-0.5 pl-0.5 pr-1 text-blue-700',
+    'rounded-r py-0.5 pr-0.5 text-blue-700',
     slotConfig.input.tokenValue,
   )
   const tokenNegationClass = twMerge(
-    'py-0.5 pl-0.5 italic text-blue-500',
+    'py-0.5 italic text-blue-500',
     slotConfig.input.tokenNegation,
   )
 
@@ -648,6 +668,7 @@ function TokenizedSearchBase<K extends string = string>({
         const text = editor.getText()
         if (text !== lastTextRef.current) {
           lastTextRef.current = text
+          setEditorText(text)
           if (!isControlled) {
             setInternalValue(text)
           }
@@ -662,11 +683,33 @@ function TokenizedSearchBase<K extends string = string>({
         return
       }
 
-      const text = editor.getText()
+      let text = editor.getText()
+
+      // If the text consists solely of non-breaking spaces (left over
+      // from ensureTokenSpacing after Ctrl+A → Backspace), treat it as
+      // empty so the placeholder shows and the dropdown re-opens.
+      const isEffectivelyEmpty = text.length === 0 || /^[\s\u00A0]*$/.test(text)
+      if (isEffectivelyEmpty && text.length > 0) {
+        // Defer the content cleanup to avoid dispatching a transaction
+        // from inside the transaction handler.
+        queueMicrotask(() => {
+          if (!editor.isDestroyed) {
+            suppressUpdateRef.current = true
+            editor.commands.setContent('<p></p>')
+            lastTextRef.current = ''
+            queueMicrotask(() => {
+              suppressUpdateRef.current = false
+            })
+          }
+        })
+        text = ''
+      }
+
       const textChanged = text !== lastTextRef.current
 
       if (textChanged) {
         lastTextRef.current = text
+        setEditorText(text)
         if (!isControlled) {
           setInternalValue(text)
         }
@@ -675,12 +718,24 @@ function TokenizedSearchBase<K extends string = string>({
 
       // Always re-evaluate dropdown context (covers both text and selection changes)
       const { from, to } = editor.state.selection
-      const cursorPos = Math.max(0, from - 1)
+      let cursorPos = Math.max(0, from - 1)
 
       // Suppress dropdown when there is a range selection (e.g. Ctrl+A)
+      // BUT: after Ctrl+A → Delete, ProseMirror may leave an AllSelection
+      // on the now-empty document. In that case, collapse the stale
+      // selection and continue so the dropdown can re-open.
       if (from !== to) {
-        setDropdownContext(null)
-        return
+        if (isEffectivelyEmpty) {
+          cursorPos = 0
+          queueMicrotask(() => {
+            if (!editor.isDestroyed) {
+              editor.commands.setTextSelection(1)
+            }
+          })
+        } else {
+          setDropdownContext(null)
+          return
+        }
       }
 
       let ctx = getCursorContext<K>(
@@ -747,13 +802,41 @@ function TokenizedSearchBase<K extends string = string>({
       if (suppressFocusRef.current) {
         return
       }
-      const text = editor.getText()
+      let text = editor.getText()
+      const isEffectivelyEmpty = text.length === 0 || /^[\s\u00A0]*$/.test(text)
+      if (isEffectivelyEmpty && text.length > 0) {
+        queueMicrotask(() => {
+          if (!editor.isDestroyed) {
+            suppressUpdateRef.current = true
+            editor.commands.setContent('<p></p>')
+            lastTextRef.current = ''
+            setEditorText('')
+            if (!isControlled) {
+              setInternalValue('')
+            }
+            queueMicrotask(() => {
+              suppressUpdateRef.current = false
+            })
+          }
+        })
+        text = ''
+      }
       const { from, to } = editor.state.selection
-      const cursorPos = Math.max(0, from - 1)
+      let cursorPos = Math.max(0, from - 1)
 
       // Suppress dropdown when there is a range selection (e.g. Ctrl+A)
+      // BUT: allow through when text is empty (stale AllSelection on empty doc)
       if (from !== to) {
-        return
+        if (isEffectivelyEmpty) {
+          cursorPos = 0
+          queueMicrotask(() => {
+            if (!editor.isDestroyed) {
+              editor.commands.setTextSelection(1)
+            }
+          })
+        } else {
+          return
+        }
       }
 
       let ctx = getCursorContext<K>(
@@ -824,7 +907,14 @@ function TokenizedSearchBase<K extends string = string>({
       editor.off('focus', handleFocus)
       editor.off('blur', handleBlur)
     }
-  }, [editor, tokenKeysAndLabels, isControlled, onChange])
+  }, [
+    editor,
+    tokenKeysAndLabels,
+    tokens,
+    negationLabel,
+    isControlled,
+    onChange,
+  ])
 
   // Pre-populate strict values and option id map from static options
   useMemo(() => {
@@ -883,10 +973,16 @@ function TokenizedSearchBase<K extends string = string>({
     if (!editor || editor.isDestroyed || !isControlled) {
       return
     }
+    const spacedValue = ensureTokenSpacing(
+      controlledValue ?? '',
+      tokenKeysAndLabels,
+      negationLabel,
+    )
     const currentText = editor.getText().replace(/\u00A0/g, ' ')
-    if (currentText !== controlledValue) {
+    if (currentText !== spacedValue.replace(/\u00A0/g, ' ')) {
       suppressUpdateRef.current = true
-      editor.commands.setContent(`<p>${controlledValue}</p>`)
+      editor.commands.setContent(`<p>${spacedValue}</p>`)
+      setEditorText(spacedValue)
       queueMicrotask(() => {
         applyTokenMarks(
           editor,
@@ -921,6 +1017,7 @@ function TokenizedSearchBase<K extends string = string>({
       if (currentText !== localValue) {
         suppressUpdateRef.current = true
         editor.commands.setContent(`<p>${localValue}</p>`)
+        setEditorText(localValue)
         queueMicrotask(() => {
           applyTokenMarks(
             editor,
@@ -1079,8 +1176,14 @@ function TokenizedSearchBase<K extends string = string>({
     }
 
     if (newText !== currentText) {
+      const spacedText = ensureTokenSpacing(
+        newText,
+        tokenKeysAndLabels,
+        negationLabel,
+      )
       suppressUpdateRef.current = true
-      editor.commands.setContent(`<p>${newText}</p>`)
+      editor.commands.setContent(`<p>${spacedText}</p>`)
+      setEditorText(spacedText)
       queueMicrotask(() => {
         applyTokenMarks(
           editor,
@@ -1094,7 +1197,7 @@ function TokenizedSearchBase<K extends string = string>({
       })
 
       if (!isControlled) {
-        setInternalValue(newText)
+        setInternalValue(spacedText)
       }
       const technicalQuery = toTechnicalQuery(
         newText,
@@ -1214,7 +1317,6 @@ function TokenizedSearchBase<K extends string = string>({
 
   const segments = useMemo(
     () => computeSegments(value),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [computeSegments, value, resolveGeneration],
   )
 
@@ -1233,33 +1335,45 @@ function TokenizedSearchBase<K extends string = string>({
     }[] = []
 
     for (const seg of segments) {
-      if (seg.type !== 'token') continue
+      if (seg.type !== 'token') {
+        continue
+      }
 
       // If the segment already has an id, it was resolved from a cached option
-      if ('id' in seg && seg.id != null) continue
+      if ('id' in seg && seg.id != null) {
+        continue
+      }
 
       const def = tokens.find(
         (t) =>
           t.key.toLowerCase() === seg.key.toLowerCase() ||
           (t.label && t.label.toLowerCase() === seg.key.toLowerCase()),
       )
-      if (!def || typeof def.options !== 'function') continue
+      if (!def || typeof def.options !== 'function') {
+        continue
+      }
 
       const lk = def.key.toLowerCase()
       const valMap = optionValueMapRef.current.get(lk)
       const isCached = valMap?.has(seg.value.toLowerCase())
 
       // If the value is already mapped (cache hit), skip
-      if (isCached) continue
+      if (isCached) {
+        continue
+      }
 
       // Build a dedup key to avoid re-resolving the same (key, value) pair
       const attemptKey = `${lk}:${seg.value.toLowerCase()}`
-      if (resolveAttemptsRef.current.has(attemptKey)) continue
+      if (resolveAttemptsRef.current.has(attemptKey)) {
+        continue
+      }
 
       unresolvedPairs.push({ def, displayValue: seg.value })
     }
 
-    if (unresolvedPairs.length === 0) return
+    if (unresolvedPairs.length === 0) {
+      return
+    }
 
     // Abort any previous in-flight resolution
     resolveAbortRef.current?.abort()
@@ -1280,13 +1394,17 @@ function TokenizedSearchBase<K extends string = string>({
         ) => TokenOption[] | Promise<TokenOption[]>
 
         const results = await optionsFn(displayValue, controller.signal)
-        if (controller.signal.aborted) return
+        if (controller.signal.aborted) {
+          return
+        }
 
         // Exact label match only
         const match = results.find(
           (o) => o.label?.toLowerCase() === displayValue.toLowerCase(),
         )
-        if (!match) return
+        if (!match) {
+          return
+        }
 
         const lk = def.key.toLowerCase()
 
@@ -1314,7 +1432,9 @@ function TokenizedSearchBase<K extends string = string>({
     })
 
     Promise.all(resolutions).then(() => {
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted) {
+        return
+      }
       setResolving(false)
       setResolveGeneration((g) => g + 1)
     })
@@ -1322,7 +1442,6 @@ function TokenizedSearchBase<K extends string = string>({
     return () => {
       controller.abort()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, tokens])
 
   // ── Imperative handle ───────────────────────────────────────────────
@@ -1338,7 +1457,7 @@ function TokenizedSearchBase<K extends string = string>({
     }
 
     const usedKeys = new Set(
-      parseTokenizedSearch(value, tokenKeysAndLabels, negationLabel)
+      parseTokenizedSearch(editorText, tokenKeysAndLabels, negationLabel)
         .filter((s): s is TokenSegment<K> => s.type === 'token')
         .map((s) => {
           const def = tokens.find(
@@ -1356,7 +1475,7 @@ function TokenizedSearchBase<K extends string = string>({
         value: t.key,
         label: t.label ?? t.key,
       }))
-  }, [tokens, dropdownContext, value, tokenKeysAndLabels])
+  }, [tokens, dropdownContext, editorText, tokenKeysAndLabels])
 
   const abortRef = useRef<AbortController | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -1443,6 +1562,8 @@ function TokenizedSearchBase<K extends string = string>({
             tokenKeysAndLabels,
             tokens,
             strictValuesRef.current,
+            undefined,
+            negationLabel,
           ),
         )
       }
@@ -1518,6 +1639,7 @@ function TokenizedSearchBase<K extends string = string>({
       const cursorPos = insertAt + insertion.length + 1
       editor.commands.setTextSelection(cursorPos)
 
+      setEditorText(next)
       if (!isControlled) {
         setInternalValue(next)
       }
@@ -1558,6 +1680,7 @@ function TokenizedSearchBase<K extends string = string>({
       const cursorPos = replaceStart + insertion.length + 1
       editor.commands.setTextSelection(cursorPos)
 
+      setEditorText(next)
       if (!isControlled) {
         setInternalValue(next)
       }
@@ -1610,6 +1733,7 @@ function TokenizedSearchBase<K extends string = string>({
     const cursorPos = replaceStart + insertion.length + (needsSpace ? 1 : 0) + 1
     editor.commands.setTextSelection(cursorPos)
 
+    setEditorText(next)
     if (!isControlled) {
       setInternalValue(next)
     }
@@ -1666,6 +1790,7 @@ function TokenizedSearchBase<K extends string = string>({
         replaceStart + insertion.length + (needsSpace ? 1 : 0) + 1
       editor.commands.setTextSelection(cursorPos)
 
+      setEditorText(next)
       if (!isControlled) {
         setInternalValue(next)
       }
@@ -1732,7 +1857,7 @@ function TokenizedSearchBase<K extends string = string>({
     const defLabelLower = def.label?.toLowerCase()
 
     return new Set(
-      parseTokenizedSearch(value, tokenKeysAndLabels, negationLabel)
+      parseTokenizedSearch(editorText, tokenKeysAndLabels, negationLabel)
         .filter((s): s is TokenSegment<K> => {
           if (s.type !== 'token') {
             return false
@@ -1760,7 +1885,7 @@ function TokenizedSearchBase<K extends string = string>({
           return s.value.toLowerCase()
         }),
     )
-  }, [dropdownContext, value, tokenKeysAndLabels, tokens])
+  }, [dropdownContext, editorText, tokenKeysAndLabels, tokens])
 
   const currentTokenDef =
     dropdownContext?.mode === 'value'
@@ -1856,14 +1981,18 @@ function TokenizedSearchBase<K extends string = string>({
         if (highlighted >= 0 && highlighted < activeOptions.length) {
           return activeOptions[highlighted]
         }
-        if (!filterQuery) return undefined
+        if (!filterQuery) {
+          return undefined
+        }
         // When the typed value exactly matches the negation label, prefer the negate option
         if (
           currentTokenDef?.negatable &&
           filterQuery.toLowerCase() === negationLabel.toLowerCase()
         ) {
           const notOpt = activeOptions.find((o) => o.value === '__not__')
-          if (notOpt) return notOpt
+          if (notOpt) {
+            return notOpt
+          }
         }
         return activeOptions[0]
       }
@@ -1970,6 +2099,7 @@ function TokenizedSearchBase<K extends string = string>({
     }
     suppressUpdateRef.current = true
     editor.commands.setContent('<p></p>')
+    setEditorText('')
     if (!isControlled) {
       setInternalValue('')
     }
@@ -1991,7 +2121,6 @@ function TokenizedSearchBase<K extends string = string>({
         negationLabel,
         optionValueMapRef.current,
       ).trim(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [value, tokens, negationLabel, resolveGeneration],
   )
 
@@ -2047,7 +2176,7 @@ function TokenizedSearchBase<K extends string = string>({
               '[&_.tokenized-search-paragraph]:m-0 [&_.tokenized-search-paragraph]:leading-[inherit]',
             )}
           />
-          {value.length === 0 && (
+          {(value.length === 0 || /^[\s\u00A0]*$/.test(value)) && (
             <span
               className={twMerge(
                 'pointer-events-none col-start-1 row-start-1 italic text-gray-400',
@@ -2060,7 +2189,7 @@ function TokenizedSearchBase<K extends string = string>({
         </div>
 
         {/* Clear button */}
-        {value.length > 0 && (
+        {value.length > 0 && !/^[\s\u00A0]*$/.test(value) && (
           <button
             type="button"
             tabIndex={-1}

@@ -517,11 +517,7 @@ function TokenizedSearchBase<K extends string = string>({
   // Track last submitted value to avoid duplicate submissions
   const lastSubmittedRef = useRef<string | null>(null)
   const [submittedQuery, setSubmittedQuery] = useState<string>(() =>
-    toTechnicalQuery(
-      value,
-      tokens,
-      negationLabel,
-    ).trim(),
+    toTechnicalQuery(value, tokens, negationLabel).trim(),
   )
 
   // Cache of valid values for strict token keys
@@ -2234,25 +2230,33 @@ function TokenizedSearchBase<K extends string = string>({
           >
             {currentTokenDef?.renderDropdown &&
             dropdownContext?.mode === 'value' ? (
-              currentTokenDef.renderDropdown({
-                value: (() => {
-                  const segmentsList = parseTokenizedSearch<K>(
-                    editor.getText(),
-                    tokenKeysAndLabels,
-                    negationLabel,
-                  )
-                  const seg = segmentsList.find(
-                    (s) =>
-                      s.type === 'token' &&
-                      s.start === dropdownContext.replaceStart,
-                  )
-                  return seg?.type === 'token' ? seg.value : ''
-                })(),
-                onChange: updateTokenValue,
-                close: () => {
-                  setDropdownContext(null)
-                },
-              })
+              (() => {
+                const segmentsList = parseTokenizedSearch<K>(
+                  editor.getText(),
+                  tokenKeysAndLabels,
+                  negationLabel,
+                )
+                const currentSegment = segmentsList.find(
+                  (s) =>
+                    s.type === 'token' &&
+                    s.start === dropdownContext.replaceStart,
+                )
+                const value =
+                  currentSegment?.type === 'token' ? currentSegment.value : ''
+                const siblings = segmentsList.filter(
+                  (s): s is TokenSegment<K> =>
+                    s.type === 'token' &&
+                    s.start !== dropdownContext.replaceStart,
+                )
+                return currentTokenDef.renderDropdown!({
+                  value,
+                  siblings,
+                  onChange: updateTokenValue,
+                  close: () => {
+                    setDropdownContext(null)
+                  },
+                })
+              })()
             ) : loading && activeOptions.length === 0 ? (
               <div
                 className={twMerge(

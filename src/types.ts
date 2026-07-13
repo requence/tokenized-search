@@ -29,6 +29,12 @@ export interface TokenizedSearchTokenDefinition<K extends string = string> {
   /** Optional custom dropdown renderer */
   renderDropdown?: (props: {
     value: string
+    /**
+     * The other token segments currently in the query (every token except the
+     * one being edited). Useful for rendering choices that depend on sibling
+     * tokens — e.g. defaulting a second date bound to complement the first.
+     */
+    siblings: TokenSegment[]
     onChange: (newValue: string, closeDropdown?: boolean) => void
     close: () => void
   }) => ReactNode

@@ -1724,9 +1724,24 @@ function TokenizedSearchBase<K extends string = string>({
     const needsSpace = after.length === 0 || !isSpace(after[0])
     const next = before + insertion + (needsSpace ? '\u00A0' : '') + after
 
+    // Strict tokens keep the dropdown open after a value is picked: the cursor
+    // lands past the trailing space and the key-suggestion dropdown reopens, so
+    // the user can add another token without re-triggering the dropdown.
+    const selectedDef = tokens.find(
+      (t) =>
+        t.key.toLowerCase() === key.toLowerCase() ||
+        (t.label && t.label.toLowerCase() === key.toLowerCase()),
+    )
+    const reopenSuggest = selectedDef?.strict ?? false
+    // When a space already follows the inserted value (mid-query edit), advance
+    // past it so the cursor sits in empty space and the reopened dropdown is in
+    // 'suggest' mode rather than re-editing the just-selected value.
+    const skipExistingSpace = reopenSuggest && !needsSpace ? 1 : 0
+
     suppressUpdateRef.current = true
     editor.commands.setContent(`<p>${next}</p>`)
-    const cursorPos = replaceStart + insertion.length + (needsSpace ? 1 : 0) + 1
+    const cursorPos =
+      replaceStart + insertion.length + (needsSpace ? 1 : 0) + skipExistingSpace + 1
     editor.commands.setTextSelection(cursorPos)
 
     setEditorText(next)
@@ -1734,7 +1749,9 @@ function TokenizedSearchBase<K extends string = string>({
       setInternalValue(next)
     }
     onChange?.(next, computeSegments(next))
-    setDropdownContext(null)
+    if (!reopenSuggest) {
+      setDropdownContext(null)
+    }
 
     queueMicrotask(() => {
       applyTokenMarks(
@@ -1746,6 +1763,15 @@ function TokenizedSearchBase<K extends string = string>({
         negationLabel,
       )
       suppressUpdateRef.current = false
+      if (reopenSuggest) {
+        const ctx = getCursorContext<K>(
+          next,
+          cursorPos - 1,
+          tokenKeysAndLabels,
+          negationLabel,
+        )
+        setDropdownContext(ctx)
+      }
     })
   })
 

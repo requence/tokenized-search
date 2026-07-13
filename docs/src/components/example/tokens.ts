@@ -92,6 +92,16 @@ export const tokens: TokenizedSearchTokenDefinition[] = [
     ],
   },
   {
+    key: 'mode',
+    label: 'Mode',
+    strict: true,
+    options: [
+      { value: 'linear', label: 'Linear' },
+      { value: 'radial', label: 'Radial' },
+      { value: 'angular', label: 'Angular' },
+    ],
+  },
+  {
     key: 'name',
     label: 'Name',
     negatable: true,

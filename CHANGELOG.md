@@ -1,5 +1,21 @@
 # @requence/tokenized-search
 
+## 1.3.0
+
+### Minor Changes
+
+- c78ec25: Pass a `siblings` array to the `renderDropdown` callback, exposing every token
+  segment in the query except the one being edited. This lets custom value
+  dropdowns render choices that depend on the other tokens present — for example
+  defaulting a second date bound to complement the first when building a range.
+
+### Patch Changes
+
+- 65f3c36: Fix submit button showing dirty state immediately on mount when initialized
+  with a default value or controlled value. The submittedQuery was initialized
+  from the raw prop value instead of the derived display-form value, causing a
+  mismatch with currentTechnicalQuery.
+
 ## 1.2.3
 
 ### Patch Changes

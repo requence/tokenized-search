@@ -13,6 +13,12 @@ export interface TokenizedSearchTokenDefinition<K extends string = string> {
   exclusive?: boolean
   /** If true, the value must match one of the fetched options. Default false. */
   strict?: boolean
+  /**
+   * If set, the value must match this regular expression to be recognized as a
+   * token. Independent of `strict`: use it for free-form-but-constrained values
+   * like dates. Example: /^\d{4}-\d{2}-\d{2}$/ for `created:2026-07-15`.
+   */
+  pattern?: RegExp
   /** If true, a "Not" option is shown in the value dropdown, enabling negation (e.g. `status:not:expired`). */
   negatable?: boolean
   /**

@@ -246,6 +246,14 @@ function getValidTokenIndices(
       }
     }
 
+    if (def.pattern && !isActive) {
+      // seg.value already has the "not:" prefix stripped by the parser,
+      // so the pattern is tested against the bare value.
+      if (!def.pattern.test(seg.value)) {
+        continue
+      }
+    }
+
     valid.add(i)
   }
 

@@ -28,6 +28,7 @@ const tokens = [
 | `icon` | `ReactNode?` | Icon shown in the key suggestion dropdown |
 | `exclusive` | `boolean?` | Only one instance of this key allowed |
 | `strict` | `boolean?` | Value must match a provided option |
+| `pattern` | `RegExp?` | Value must match this regular expression |
 | `negatable` | `boolean?` | Enable `not:` prefix for negation |
 | `renderDropdown` | `(props) => ReactNode` | Custom dropdown renderer |
 
@@ -46,6 +47,22 @@ Set `strict: true` to require values match one of the provided options. Invalid 
 ```tsx
 { key: 'priority', strict: true, options: [...] }
 ```
+
+## Pattern Validation
+
+Set `pattern` to a regular expression to constrain values without locking them to a fixed option list — the middle ground between `strict` and fully open. Values that don't match are not highlighted as tokens. This is ideal for free-form-but-structured values like dates:
+
+```tsx
+{
+  key: 'created',
+  label: 'Created',
+  pattern: /^\d{4}-\d{2}-\d{2}$/, // ISO date, e.g. created:2026-07-15
+}
+```
+
+`pattern` is independent of `strict`: `strict` requires the value to be in the option list, `pattern` requires it to match the regex, and neither leaves the token fully open.
+
+The pattern is tested against the value exactly as typed, so case sensitivity is governed by the regex itself (add the `i` flag if needed) — unlike `strict` matching, which is always case-insensitive. As with strict validation, the token currently being edited is exempt so it isn't stripped mid-typing.
 
 ## Async Options
 

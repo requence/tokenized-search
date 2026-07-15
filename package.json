@@ -1,6 +1,6 @@
 {
   "name": "@requence/tokenized-search",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Tokenized search input with TipTap-powered rich text editing, dropdown suggestions, and structured query parsing for React",
   "type": "module",
   "sideEffects": false,

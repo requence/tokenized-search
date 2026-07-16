@@ -108,6 +108,11 @@ export const tokens: TokenizedSearchTokenDefinition[] = [
     exclusive: true,
   },
   {
+    key: 'year',
+    label: 'Year',
+    pattern: /^\d{4}$/, // Must be a 4-digit number, e.g. year:2026
+  },
+  {
     key: 'reference',
     label: 'Reference',
     options: async (

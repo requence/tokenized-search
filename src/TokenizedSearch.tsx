@@ -1732,15 +1732,19 @@ function TokenizedSearchBase<K extends string = string>({
     const needsSpace = after.length === 0 || !isSpace(after[0])
     const next = before + insertion + (needsSpace ? '\u00A0' : '') + after
 
-    // Strict tokens keep the dropdown open after a value is picked: the cursor
-    // lands past the trailing space and the key-suggestion dropdown reopens, so
-    // the user can add another token without re-triggering the dropdown.
+    // Picking a value keeps the dropdown open: the cursor lands past the
+    // trailing space and the key-suggestion dropdown reopens, so the user can
+    // add another token without re-triggering the dropdown. The reopened
+    // suggestions already exclude used exclusive keys via tokenKeySuggestions.
     const selectedDef = tokens.find(
       (t) =>
         t.key.toLowerCase() === key.toLowerCase() ||
         (t.label && t.label.toLowerCase() === key.toLowerCase()),
     )
-    const reopenSuggest = selectedDef?.strict ?? false
+    // Exclude free-typed values: their Enter path calls handleSubmit() right
+    // after selectOption(), so a deferred reopen would pop the dropdown back
+    // open after the search closed it.
+    const reopenSuggest = !!selectedDef && !isTypedValue
     // When a space already follows the inserted value (mid-query edit), advance
     // past it so the cursor sits in empty space and the reopened dropdown is in
     // 'suggest' mode rather than re-editing the just-selected value.

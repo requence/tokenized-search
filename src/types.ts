@@ -44,6 +44,22 @@ export interface TokenizedSearchTokenDefinition<K extends string = string> {
     onChange: (newValue: string, closeDropdown?: boolean) => void
     close: () => void
   }) => ReactNode
+  /**
+   * Only relevant together with `renderDropdown`. When the custom dropdown
+   * opens, move focus into it (focuses its first focusable element).
+   *
+   * This takes focus off the search editor's `contenteditable`. In WebKit /
+   * Safari, pressing an element while the editor still holds focus starts the
+   * editor's text-selection drag, which captures the pointer and cancels the
+   * press — so clicks on embedded widgets (date pickers, comboboxes, …) never
+   * fire. Focusing the dropdown on open avoids that entirely, and keeps the
+   * popover open (focus stays within the widget).
+   *
+   * Defaults to `true` when `renderDropdown` is set. Set to `false` for custom
+   * dropdowns that must keep focus in the editor (e.g. ones driven purely by
+   * continued typing).
+   */
+  focusOnOpen?: boolean
 }
 
 // ── Token Option ──────────────────────────────────────────────────────

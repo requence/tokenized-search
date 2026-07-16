@@ -10,6 +10,7 @@ import {
   useEffect,
   useEffectEvent,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -554,7 +555,17 @@ function TokenizedSearchBase<K extends string = string>({
 
   const dropdownRef = useRef<HTMLDivElement | null>(null)
 
-  const focusDropdown = () => {
+  // Identity of the custom dropdown we last moved focus into, so `focusOnOpen`
+  // fires once per open rather than on every re-render (which would keep
+  // stealing focus while the user interacts with the dropdown).
+  const focusedOnOpenKeyRef = useRef<string | null>(null)
+
+  // Caret position to restore to the editor once a custom dropdown that held
+  // focus closes on commit. Set by `updateTokenValue`, consumed by the
+  // restore-focus layout effect. `null` when there's nothing to restore.
+  const restoreCaretRef = useRef<number | null>(null)
+
+  const focusDropdown = useCallback(() => {
     if (!dropdownRef.current) {
       return false
     }
@@ -566,7 +577,20 @@ function TokenizedSearchBase<K extends string = string>({
       return true
     }
     return false
-  }
+  }, [])
+
+  // True only when focus has moved to a real element OUTSIDE the widget. Focus
+  // landing at <body>/null is deliberately not treated as "leaving": WebKit
+  // doesn't focus <button>s on click, so pressing a control inside a custom
+  // dropdown reports no focus target. Dismissal for those cases is owned by the
+  // outside-pointerdown listener; this covers keyboard focus moving away.
+  const focusMovedOutside = useCallback((target: Node | null) => {
+    const container = containerRef.current
+    if (!container || target === null || target === document.body) {
+      return false
+    }
+    return !container.contains(target)
+  }, [])
 
   const tokenKeyClass = twMerge(
     'rounded-l py-0.5 pl-1 font-semibold text-blue-600',
@@ -788,15 +812,10 @@ function TokenizedSearchBase<K extends string = string>({
       if (editor.isFocused) {
         setDropdownContext(ctx)
       } else {
-        // Defer checking focus transition to ensure document.activeElement is updated
+        // Defer so document.activeElement reflects the focus transition.
         setTimeout(() => {
-          if (!editor.isFocused) {
-            const container = containerRef.current
-            const activeEl = document.activeElement
-            const isFocusedWithin = container && container.contains(activeEl)
-            if (!isFocusedWithin) {
-              setDropdownContext(null)
-            }
+          if (!editor.isFocused && focusMovedOutside(document.activeElement)) {
+            setDropdownContext(null)
           }
         }, 0)
       }
@@ -885,9 +904,7 @@ function TokenizedSearchBase<K extends string = string>({
 
     const handleBlur = () => {
       setTimeout(() => {
-        const container = containerRef.current
-        const activeEl = document.activeElement
-        if (container && container.contains(activeEl)) {
+        if (!focusMovedOutside(document.activeElement)) {
           return
         }
         setDropdownContext(null)
@@ -918,7 +935,116 @@ function TokenizedSearchBase<K extends string = string>({
     negationLabel,
     isControlled,
     onChange,
+    focusMovedOutside,
   ])
+
+  // `focusOnOpen`: when a custom (`renderDropdown`) value dropdown opens, move
+  // focus into it. This takes focus off the editor's contenteditable so WebKit
+  // doesn't turn a press inside the dropdown into a text-selection drag (which
+  // cancels clicks on embedded widgets), and keeps the popover open.
+  useEffect(() => {
+    if (dropdownContext?.mode !== 'value') {
+      focusedOnOpenKeyRef.current = null
+      return
+    }
+    const key = dropdownContext.key.toLowerCase()
+    const def = tokens.find(
+      (t) =>
+        t.key.toLowerCase() === key ||
+        (t.label !== undefined && t.label.toLowerCase() === key),
+    )
+    if (!def?.renderDropdown || def.focusOnOpen === false) {
+      focusedOnOpenKeyRef.current = null
+      return
+    }
+    const openKey = `${dropdownContext.key}:${dropdownContext.replaceStart}`
+    if (focusedOnOpenKeyRef.current === openKey) {
+      return
+    }
+    // Focus after the dropdown has painted this open.
+    const raf = requestAnimationFrame(() => {
+      if (focusDropdown()) {
+        focusedOnOpenKeyRef.current = openKey
+      }
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [dropdownContext, tokens, focusDropdown])
+
+  // Dismiss on a pointer press outside the widget. This is the robust dismissal
+  // signal: unlike focus/blur, it doesn't depend on the browser focusing the
+  // pressed element, so pressing a control inside the dropdown never dismisses
+  // (its target is within the container) even in WebKit, where clicked buttons
+  // don't take focus. Blur-based dismissal still covers keyboard tab-out.
+  useEffect(() => {
+    if (!dropdownContext) {
+      return
+    }
+    const handlePointerDownOutside = (event: PointerEvent) => {
+      const container = containerRef.current
+      if (!container || container.contains(event.target as Node | null)) {
+        return
+      }
+      setDropdownContext(null)
+      if (editor && !editor.isDestroyed) {
+        applyTokenMarks(
+          editor,
+          tokenKeysAndLabels,
+          tokens,
+          strictValuesRef.current,
+          undefined,
+          negationLabel,
+        )
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDownOutside, true)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDownOutside, true)
+    }
+  }, [dropdownContext, editor, tokenKeysAndLabels, tokens, negationLabel])
+
+  // Return focus + caret to the editor after a focus-holding custom dropdown
+  // (see `focusOnOpen`) commits and closes. A layout effect runs after React
+  // has unmounted the dropdown, so the focus we set isn't cleared by the
+  // unmount.
+  useLayoutEffect(() => {
+    if (dropdownContext !== null || restoreCaretRef.current === null) {
+      return
+    }
+    const pos = restoreCaretRef.current
+    restoreCaretRef.current = null
+    if (!editor || editor.isDestroyed) {
+      return
+    }
+    // Focus is suppressed so `handleFocus` doesn't recompute the dropdown while
+    // we position the caret. The caret is set in state first, then focused via
+    // ProseMirror's synchronous view.focus(), which re-applies the state
+    // selection to the DOM immediately after the element gains focus. TipTap's
+    // focus() command must not be used here: on Chrome it defers the DOM focus
+    // to a requestAnimationFrame, and when that runs Chrome restores the
+    // contenteditable's remembered pre-blur selection (the caret right after
+    // the token key), which never gets corrected.
+    suppressFocusRef.current = true
+    editor.commands.setTextSelection(pos)
+    editor.view.focus()
+    // Then reopen the key-suggestion dropdown at the restored caret — same as
+    // picking a value from the built-in dropdown (see selectOption). Computed
+    // explicitly rather than via handleFocus, whose focus event fires before
+    // the caret above is applied.
+    setDropdownContext(
+      getCursorContext<K>(
+        editor.getText(),
+        pos - 1,
+        tokenKeysAndLabels,
+        negationLabel,
+      ),
+    )
+    // No cleanup for this timeout: the setDropdownContext call above changes a
+    // dependency and re-runs this effect synchronously, so a cleanup would
+    // cancel the reset and leave focus handling suppressed for good.
+    setTimeout(() => {
+      suppressFocusRef.current = false
+    }, 50)
+  }, [dropdownContext, editor, tokenKeysAndLabels, negationLabel])
 
   // Pre-populate strict values and option id map from static options
   useMemo(() => {
@@ -1816,12 +1942,20 @@ function TokenizedSearchBase<K extends string = string>({
       const needsSpace = closeDropdown
         ? after.length === 0 || !isSpace(after[0])
         : false
+      // When committing, advance past a following space so the reopened
+      // dropdown lands in empty space (key suggestions) instead of re-editing
+      // the just-committed value. Mirrors selectOption.
+      const skipExistingSpace = closeDropdown && !needsSpace ? 1 : 0
       const next = before + insertion + (needsSpace ? '\u00A0' : '') + after
 
       suppressUpdateRef.current = true
       editor.commands.setContent(`<p>${next}</p>`)
       const cursorPos =
-        replaceStart + insertion.length + (needsSpace ? 1 : 0) + 1
+        replaceStart +
+        insertion.length +
+        (needsSpace ? 1 : 0) +
+        skipExistingSpace +
+        1
       editor.commands.setTextSelection(cursorPos)
 
       setEditorText(next)
@@ -1850,14 +1984,17 @@ function TokenizedSearchBase<K extends string = string>({
           negationLabel,
         )
         suppressUpdateRef.current = false
-        if (closeDropdown) {
-          suppressFocusRef.current = true
-          editor.commands.focus()
-          setTimeout(() => {
-            suppressFocusRef.current = false
-          }, 50)
-        }
       })
+
+      if (closeDropdown) {
+        // A custom dropdown may hold focus while open (see `focusOnOpen`).
+        // Committing must return focus + caret to the editor, but that has to
+        // happen *after* React unmounts the dropdown — unmounting a focused
+        // element clears focus. Hand the target caret position to the restore
+        // effect, which runs once the dropdown context clears. See
+        // `restoreCaretRef`.
+        restoreCaretRef.current = cursorPos
+      }
     },
   )
 
@@ -2141,7 +2278,15 @@ function TokenizedSearchBase<K extends string = string>({
     onSearch?.([], '')
     lastSubmittedRef.current = ''
     setSubmittedQuery('')
-    setDropdownContext(null)
+    // The clear button's onPointerDown preventDefault keeps focus in the
+    // editor, so reopen the key-suggestion dropdown on the now-empty input
+    // instead of leaving it closed. Focus synchronously via view.focus() —
+    // see the caret-restore effect for why TipTap's focus() command can't be
+    // used here.
+    editor.view.focus()
+    setDropdownContext(
+      getCursorContext<K>('', 0, tokenKeysAndLabels, negationLabel),
+    )
     queueMicrotask(() => {
       suppressUpdateRef.current = false
     })
@@ -2166,21 +2311,22 @@ function TokenizedSearchBase<K extends string = string>({
     <div
       ref={containerRef}
       onBlur={(e) => {
-        if (
-          containerRef.current &&
-          !containerRef.current.contains(e.relatedTarget as Node | null)
-        ) {
-          setDropdownContext(null)
-          if (editor && !editor.isDestroyed) {
-            applyTokenMarks(
-              editor,
-              tokenKeysAndLabels,
-              tokens,
-              strictValuesRef.current,
-              undefined,
-              negationLabel,
-            )
-          }
+        // Dismiss when keyboard focus leaves the widget for a real element
+        // outside it. Pointer dismissal (incl. WebKit clicks that focus
+        // nothing) is owned by the outside-pointerdown listener.
+        if (!focusMovedOutside(e.relatedTarget as Node | null)) {
+          return
+        }
+        setDropdownContext(null)
+        if (editor && !editor.isDestroyed) {
+          applyTokenMarks(
+            editor,
+            tokenKeysAndLabels,
+            tokens,
+            strictValuesRef.current,
+            undefined,
+            negationLabel,
+          )
         }
       }}
       className={twMerge(

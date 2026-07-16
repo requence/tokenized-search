@@ -31,6 +31,7 @@ const tokens = [
 | `pattern` | `RegExp?` | Value must match this regular expression |
 | `negatable` | `boolean?` | Enable `not:` prefix for negation |
 | `renderDropdown` | `(props) => ReactNode` | Custom dropdown renderer |
+| `focusOnOpen` | `boolean?` | Move focus into a custom dropdown when it opens. Defaults to `true` when `renderDropdown` is set. |
 
 ## Exclusive Tokens
 
@@ -140,8 +141,43 @@ The `renderDropdown` callback receives:
 | Prop | Type | Description |
 |------|------|-------------|
 | `value` | `string` | Current token value |
+| `siblings` | `TokenSegment[]` | The other tokens in the query (all except the one being edited) |
 | `onChange` | `(value, closeDropdown?) => void` | Update the value |
 | `close` | `() => void` | Close the dropdown |
+
+### Focus and embedded widgets
+
+Custom dropdowns often embed focusable widgets — a date picker, a combobox,
+buttons. Two things make this "just work":
+
+- **`focusOnOpen` (default `true`).** When the dropdown opens, focus moves into
+  it. This is required for widgets built on pointer-press libraries (e.g.
+  react-aria): in WebKit/Safari, pressing an element while the search editor's
+  `contenteditable` still holds focus starts the editor's text-selection drag,
+  which captures the pointer and **cancels the press** — so the widget's click
+  never fires. Focusing the dropdown on open takes focus off the editor and
+  avoids this. Set `focusOnOpen: false` only for dropdowns driven purely by
+  continued typing in the editor.
+- **The popover stays open while you interact with it.** Dismissal is driven by
+  a pointer press *outside* the widget (plus keyboard tab-out), not by focus
+  loss. So you do **not** need to guard controls with
+  `onMouseDown={(e) => e.preventDefault()}` to stop the popover closing — and
+  you shouldn't, because preventing the mousedown default breaks press detection
+  for react-aria-based widgets in WebKit.
+
+```tsx
+{
+  key: 'created',
+  // focusOnOpen defaults to true — the calendar receives focus on open, so
+  // day clicks register even in Safari, and the popover stays open.
+  renderDropdown: ({ value, onChange }) => (
+    <DateCalendar
+      value={parseDate(value)}
+      onChange={(date) => onChange(formatDate(date), true)}
+    />
+  ),
+}
+```
 
 ## Option Shape
 

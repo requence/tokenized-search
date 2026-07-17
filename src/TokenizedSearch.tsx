@@ -1638,6 +1638,11 @@ function TokenizedSearchBase<K extends string = string>({
     if (!dropdownContext || dropdownContext.mode === 'suggest') {
       setOptions([])
       setLoading(false)
+      // Reset the highlight so a reopened suggest dropdown (e.g. after picking a
+      // value) starts with nothing selected. Otherwise a stale highlight from
+      // the previous value list carries over and Enter picks the first key
+      // suggestion instead of submitting the search.
+      setHighlighted(-1)
       return
     }
 

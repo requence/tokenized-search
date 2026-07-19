@@ -458,6 +458,7 @@ function TokenizedSearchBase<K extends string = string>({
   onChange,
   onSearch,
   small,
+  disabled,
   className,
   onKeyDown: onKeyDownProp,
   ref,
@@ -625,6 +626,7 @@ function TokenizedSearchBase<K extends string = string>({
 
   const editor = useEditor({
     autofocus: autoFocus ?? false,
+    editable: !disabled,
     extensions: [
       SingleLineDocument,
       Paragraph.configure({
@@ -655,6 +657,13 @@ function TokenizedSearchBase<K extends string = string>({
       },
     },
   })
+
+  // Keep the editor's editable state in sync with the `disabled` prop.
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) {
+      editor.setEditable(!disabled)
+    }
+  }, [editor, disabled])
 
   // ── Update dropdown position from caret ────────────────────────────
 
@@ -2143,6 +2152,7 @@ function TokenizedSearchBase<K extends string = string>({
   ])
 
   const isDropdownVisible =
+    !disabled &&
     dropdownContext !== null &&
     (activeOptions.length > 0 ||
       loading ||
@@ -2152,6 +2162,9 @@ function TokenizedSearchBase<K extends string = string>({
   // ── Keyboard handling ──────────────────────────────────────────────
 
   const handleKeyDown = useEffectEvent((event: React.KeyboardEvent) => {
+    if (disabled) {
+      return
+    }
     if (isDropdownVisible) {
       const getTarget = () => {
         if (highlighted >= 0 && highlighted < activeOptions.length) {
@@ -2315,6 +2328,8 @@ function TokenizedSearchBase<K extends string = string>({
   return (
     <div
       ref={containerRef}
+      aria-disabled={disabled || undefined}
+      data-disabled={disabled || undefined}
       onBlur={(e) => {
         // Dismiss when keyboard focus leaves the widget for a real element
         // outside it. Pointer dismissal (incl. WebKit clicks that focus
@@ -2337,6 +2352,8 @@ function TokenizedSearchBase<K extends string = string>({
       className={twMerge(
         'group relative flex items-stretch rounded border border-gray-300 bg-white text-sm outline-none transition-colors duration-150 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500',
         small ? 'h-6 text-xs' : 'h-8 text-sm',
+        disabled &&
+          'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400 opacity-60 focus-within:border-gray-200 focus-within:ring-0',
         className,
       )}
     >
@@ -2374,7 +2391,7 @@ function TokenizedSearchBase<K extends string = string>({
         </div>
 
         {/* Clear button */}
-        {value.length > 0 && !/^[\s\u00A0]*$/.test(value) && (
+        {!disabled && value.length > 0 && !/^[\s\u00A0]*$/.test(value) && (
           <button
             type="button"
             tabIndex={-1}
@@ -2560,16 +2577,18 @@ function TokenizedSearchBase<K extends string = string>({
         <button
           type="button"
           tabIndex={-1}
-          disabled={resolving}
+          disabled={resolving || disabled}
           onMouseDown={() => {
             suppressFocusRef.current = true
           }}
           onClick={handleSubmit}
           data-dirty={isDirty || undefined}
           data-resolving={resolving || undefined}
+          data-disabled={disabled || undefined}
           aria-busy={resolving || undefined}
           className={twMerge(
             'flex shrink-0 cursor-pointer items-center justify-center rounded-r border-l border-gray-300 px-2.5 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600',
+            disabled && 'cursor-not-allowed hover:bg-transparent hover:text-gray-400',
             slotConfig.submitButton.className,
           )}
         >

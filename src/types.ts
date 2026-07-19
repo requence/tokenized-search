@@ -116,6 +116,8 @@ export interface TokenizedSearchProps<K extends string = string> {
   onSearch?: (segments: TokenizedSearchSegment<K>[], rawText: string) => void
   /** Small variant */
   small?: boolean
+  /** Disable the input — blocks editing, dropdowns, and submit */
+  disabled?: boolean
   className?: string
   /**
    * Called when a key is pressed and the dropdown is not open.

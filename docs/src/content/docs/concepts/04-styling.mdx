@@ -116,6 +116,18 @@ Use the `group` class together with `group-aria-busy:` variants to swap between 
 </TokenizedSearch.SubmitButton>
 ```
 
+#### Disabled State
+
+When the `disabled` prop is set, the whole input becomes read-only: editing, dropdowns, keyboard navigation, and submit are all blocked. The component ships with a greyed-out default style, and the root container exposes both `data-disabled` and `aria-disabled` so you can layer on your own.
+
+Because the root is a `<div>`, the native `disabled:` variant won't match it — use the `data-disabled:` variant on `className` instead:
+
+```tsx
+<TokenizedSearch disabled className="data-[disabled]:opacity-50" />
+```
+
+The submit button *is* a real `<button>` and receives the native `disabled` attribute (plus `data-disabled`), so `disabled:*` works there via the `<SubmitButton>` slot.
+
 ---
 
 ## Dropdown Slots
@@ -237,6 +249,8 @@ TokenizedSearch uses semantic HTML attributes for state, enabling Tailwind varia
 | `data-dirty` | Submit button | The query text differs from the last submitted search |
 | `aria-busy` | Submit button | Async token values are being resolved (e.g. after paste) |
 | `data-resolving` | Submit button | Same as `aria-busy` — alternative CSS hook for styling |
+| `data-disabled`, `aria-disabled` | Root container | The `disabled` prop is set |
+| `data-disabled` | Submit button | The `disabled` prop is set (also gets the native `disabled` attribute) |
 
 ---
 

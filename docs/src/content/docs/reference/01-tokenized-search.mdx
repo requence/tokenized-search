@@ -19,6 +19,7 @@ import { TokenizedSearch } from '@requence/tokenized-search'
 | `onChange` | `(value, segments) => void` | — | Called on text change |
 | `onSearch` | `(segments, rawText) => void` | — | Called on Enter submit |
 | `small` | `boolean` | `false` | Small variant |
+| `disabled` | `boolean` | `false` | Disables editing, dropdowns, and submit; greys out the input |
 | `className` | `string` | — | Root container class |
 | `onKeyDown` | `(event) => void` | — | Key handler (when dropdown is closed) |
 | `ref` | `Ref<TokenizedSearchHandle>` | — | Imperative handle |
@@ -91,3 +92,5 @@ Must be children of `<Dropdown>`.
 | `data-dirty` | `<SubmitButton>` | Query text differs from last submission |
 | `aria-busy` | `<SubmitButton>` | Async token values are being resolved (e.g. after paste) |
 | `data-resolving` | `<SubmitButton>` | Same as `aria-busy` — alternative CSS hook |
+| `data-disabled`, `aria-disabled` | Root container | The `disabled` prop is set — target with `data-disabled:*` Tailwind variants |
+| `data-disabled` | `<SubmitButton>` | The `disabled` prop is set (button also gets the native `disabled` attribute) |

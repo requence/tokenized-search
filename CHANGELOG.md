@@ -1,5 +1,15 @@
 # @requence/tokenized-search
 
+## 1.8.0
+
+### Minor Changes
+
+- 4fb91a3: Add an `autoCommit` prop to `TokenizedSearch`. When set, `onSearch` fires with
+  the technical query on every change (including after async option resolution)
+  instead of only on Enter/submit, and the submit button is not rendered. This
+  enables auto-committing search fields that apply changes without a manual
+  button press.
+
 ## 1.7.0
 
 ### Minor Changes

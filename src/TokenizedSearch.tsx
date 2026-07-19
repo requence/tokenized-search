@@ -457,6 +457,7 @@ function TokenizedSearchBase<K extends string = string>({
   defaultValue = '',
   onChange,
   onSearch,
+  autoCommit,
   small,
   disabled,
   className,
@@ -2323,6 +2324,22 @@ function TokenizedSearchBase<K extends string = string>({
 
   const isDirty = currentTechnicalQuery !== submittedQuery
 
+  // Auto-commit: emit onSearch on every technical-query change (including after
+  // async option resolution, which currentTechnicalQuery tracks via
+  // resolveGeneration), so no submit button is required. The lastSubmittedRef
+  // guard makes this idempotent — onSearch only fires on a real query change.
+  useEffect(() => {
+    if (!autoCommit || currentTechnicalQuery === lastSubmittedRef.current) {
+      return
+    }
+    lastSubmittedRef.current = currentTechnicalQuery
+    setSubmittedQuery(currentTechnicalQuery)
+    onSearch?.(
+      segments.filter((s) => s.type !== 'text' || s.text.trim().length > 0),
+      currentTechnicalQuery,
+    )
+  }, [autoCommit, currentTechnicalQuery, segments, onSearch])
+
   // ── Render ─────────────────────────────────────────────────────────
 
   return (
@@ -2400,7 +2417,7 @@ function TokenizedSearchBase<K extends string = string>({
             className={twMerge(
               'shrink-0 cursor-pointer text-gray-400 transition-colors hover:text-gray-600',
               small ? 'size-3' : 'size-3.5',
-              !slotConfig.submitButton.children && 'mr-1',
+              (autoCommit || !slotConfig.submitButton.children) && 'mr-1',
               slotConfig.clearButton.className,
             )}
           >
@@ -2572,8 +2589,9 @@ function TokenizedSearchBase<K extends string = string>({
         )}
       </div>
 
-      {/* Search / submit button — outside editor scope */}
-      {slotConfig.submitButton.children && (
+      {/* Search / submit button — outside editor scope. Suppressed entirely in
+          autoCommit mode, where the search fires on every change. */}
+      {!autoCommit && slotConfig.submitButton.children && (
         <button
           type="button"
           tabIndex={-1}

@@ -114,6 +114,12 @@ export interface TokenizedSearchProps<K extends string = string> {
   onChange?: (value: string, segments: TokenizedSearchSegment<K>[]) => void
   /** Called when user presses Enter to submit. Receives parsed segments and raw query text. */
   onSearch?: (segments: TokenizedSearchSegment<K>[], rawText: string) => void
+  /**
+   * Auto-committing mode. When set, `onSearch` fires on every change (with the
+   * technical query, once async options have resolved) instead of only on
+   * Enter / submit, and the submit button is not rendered.
+   */
+  autoCommit?: boolean
   /** Small variant */
   small?: boolean
   /** Disable the input — blocks editing, dropdowns, and submit */

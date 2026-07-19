@@ -74,6 +74,22 @@ const [value, setValue] = useState('')
 />
 ```
 
+## Auto-commit
+
+By default the search only commits when the user presses Enter or clicks the
+submit button. Pass `autoCommit` to fire `onSearch` on every change instead —
+with the technical query, once any async options have resolved — and hide the
+submit button. Useful when the query should apply immediately without a manual
+step:
+
+```tsx
+<TokenizedSearch
+  autoCommit
+  tokens={tokens}
+  onSearch={(segments, rawText) => applyFilter(rawText)}
+/>
+```
+
 ## Next Steps
 
 - [Token Definitions](/concepts/02-token-definitions/) — configure token keys, options, and behavior

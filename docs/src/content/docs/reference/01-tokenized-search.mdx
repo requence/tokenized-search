@@ -18,6 +18,7 @@ import { TokenizedSearch } from '@requence/tokenized-search'
 | `defaultValue` | `string` | `''` | Default value (uncontrolled) |
 | `onChange` | `(value, segments) => void` | — | Called on text change |
 | `onSearch` | `(segments, rawText) => void` | — | Called on Enter submit |
+| `autoCommit` | `boolean` | `false` | Fires `onSearch` on every change (with the technical query, once async options resolve) instead of only on Enter/submit, and hides the submit button |
 | `small` | `boolean` | `false` | Small variant |
 | `disabled` | `boolean` | `false` | Disables editing, dropdowns, and submit; greys out the input |
 | `className` | `string` | — | Root container class |
@@ -55,7 +56,7 @@ All slots accept a `className` prop that is merged with internal base styles via
 |------|-------------|------------|-------------|
 | `<Input>` | Editor area container | Nested input slots | Wraps the TipTap editor and clear button |
 | `<ClearButton>` | Button styling | Icon element | Clear button (hidden when editor is empty) |
-| `<SubmitButton>` | Button styling | Icon element | Submit button (supports `data-[dirty]:` and `aria-busy` variants) |
+| `<SubmitButton>` | Button styling | Icon element | Submit button (supports `data-[dirty]:` and `aria-busy` variants). Not rendered when `autoCommit` is set |
 | `<Dropdown>` | Container styling | Nested dropdown slots | Dropdown container |
 
 ### Input Slots

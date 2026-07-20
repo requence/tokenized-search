@@ -1,6 +1,26 @@
-import type { TokenOption, TokenizedSearchSegment } from './types.ts'
+import type {
+  OperatorSegment,
+  TokenOption,
+  TokenizedSearchSegment,
+} from './types.ts'
 
 const sQuote = String.fromCharCode(39)
+
+/** The literal text an operator segment renders back to. */
+export function operatorText(op: OperatorSegment['op']): string {
+  switch (op) {
+    case 'and':
+      return 'AND'
+    case 'or':
+      return 'OR'
+    case 'not':
+      return 'NOT'
+    case 'open':
+      return '('
+    case 'close':
+      return ')'
+  }
+}
 
 /** Resolve the display text for a token option (label ?? value). */
 export function getOptionDisplayText(option: TokenOption): string {
@@ -13,6 +33,98 @@ export function getOptionDisplayText(option: TokenOption): string {
  */
 export function isSpace(ch: string): boolean {
   return ch === ' ' || ch === '\u00A0'
+}
+
+/**
+ * Check if a character delimits a token \u2014 whitespace or a grouping paren.
+ * Parens must break key/value scanning so `(status:open)` is recognized as
+ * `(` + token + `)` rather than a key literally named `(status`.
+ */
+export function isDelimiter(ch: string): boolean {
+  return isSpace(ch) || ch === '(' || ch === ')'
+}
+
+/**
+ * Split a run of plain (non-token) text into text and operator segments.
+ * Recognizes grouping parens `(` / `)` anywhere, and the boolean keywords
+ * `AND` / `OR` only when they appear uppercase as standalone words (mirroring
+ * GitHub \u2014 lowercase `and` / `or` stay literal search text). Offsets are
+ * emitted relative to `base`, the position of `text` in the original string.
+ */
+function splitPlainText<K extends string>(
+  text: string,
+  base: number,
+  out: TokenizedSearchSegment<K>[],
+): void {
+  let runStart = 0
+  let i = 0
+
+  const flushText = (end: number): void => {
+    if (end > runStart) {
+      out.push({
+        type: 'text',
+        text: text.slice(runStart, end),
+        start: base + runStart,
+        end: base + end,
+      })
+    }
+  }
+
+  while (i < text.length) {
+    const ch = text[i]
+
+    if (ch === '(' || ch === ')') {
+      flushText(i)
+      out.push({
+        type: 'operator',
+        op: ch === '(' ? 'open' : 'close',
+        start: base + i,
+        end: base + i + 1,
+      })
+      i++
+      runStart = i
+      continue
+    }
+
+    // Standalone uppercase AND / OR / NOT keyword?
+    if (ch === 'A' || ch === 'O' || ch === 'N') {
+      const prev = i === 0 ? undefined : text[i - 1]
+      const prevOk = prev === undefined || isDelimiter(prev)
+      if (prevOk) {
+        let op: 'and' | 'or' | 'not' | null = null
+        let len = 0
+        if (text.slice(i, i + 3) === 'AND') {
+          op = 'and'
+          len = 3
+        } else if (text.slice(i, i + 3) === 'NOT') {
+          op = 'not'
+          len = 3
+        } else if (text.slice(i, i + 2) === 'OR') {
+          op = 'or'
+          len = 2
+        }
+        if (op) {
+          const after = text[i + len]
+          if (after === undefined || isDelimiter(after)) {
+            flushText(i)
+            out.push({
+              type: 'operator',
+              op,
+              start: base + i,
+              end: base + i + len,
+            })
+            i += len
+            runStart = i
+            continue
+          }
+        }
+      }
+    }
+
+    i++
+  }
+
+  flushText(text.length)
 }
 
 /**
@@ -78,11 +190,31 @@ export function parseTokenizedSearch<K extends string>(
   rawText: string,
   tokenKeys: string[],
   negationLabel: string = 'not',
+  parseOperators: boolean = false,
 ): TokenizedSearchSegment<K>[] {
   const text = rawText.replace(/\u00A0/g, ' ')
   const segments: TokenizedSearchSegment<K>[] = []
   const keySet = new Set(tokenKeys.map((k) => k.toLowerCase()))
   const notPrefix = negationLabel.toLowerCase() + ':'
+
+  // When operators are off, parens carry no meaning: only whitespace delimits
+  // tokens, and plain text is never split into operator segments.
+  const isBoundary = parseOperators ? isDelimiter : isSpace
+  const flushPlain = (from: number, to: number): void => {
+    if (to <= from) {
+      return
+    }
+    if (parseOperators) {
+      splitPlainText(text.slice(from, to), from, segments)
+    } else {
+      segments.push({
+        type: 'text',
+        text: text.slice(from, to),
+        start: from,
+        end: to,
+      })
+    }
+  }
 
   let i = 0
   let plainStart = 0
@@ -97,7 +229,7 @@ export function parseTokenizedSearch<K extends string>(
     // Walk backwards from colon to find the key start — must be preceded by
     // start-of-string or whitespace
     let keyStart = colonIndex
-    while (keyStart > 0 && !isSpace(text[keyStart - 1])) {
+    while (keyStart > 0 && !isBoundary(text[keyStart - 1])) {
       keyStart--
     }
 
@@ -110,9 +242,12 @@ export function parseTokenizedSearch<K extends string>(
     // Find value end — next space or end of string, respecting quotes and negation prefix
     let valueEnd = colonIndex + 1
 
-    // Skip the negation prefix if present
+    // Skip the negation prefix if present. In complex mode, per-token
+    // negation is disabled — negation is expressed with the NOT operator — so
+    // the prefix is left as part of the value.
     let hasNot = false
     if (
+      !parseOperators &&
       text.slice(valueEnd, valueEnd + notPrefix.length).toLowerCase() === notPrefix &&
       valueEnd + notPrefix.length <= text.length
     ) {
@@ -133,7 +268,7 @@ export function parseTokenizedSearch<K extends string>(
         valueEnd++ // include closing quote
       }
     } else {
-      while (valueEnd < text.length && !isSpace(text[valueEnd])) {
+      while (valueEnd < text.length && !isBoundary(text[valueEnd])) {
         valueEnd++
       }
     }
@@ -145,15 +280,9 @@ export function parseTokenizedSearch<K extends string>(
       value = value.slice(1, -1)
     }
 
-    // Flush any plain text before this token
-    if (keyStart > plainStart) {
-      segments.push({
-        type: 'text',
-        text: text.slice(plainStart, keyStart),
-        start: plainStart,
-        end: keyStart,
-      })
-    }
+    // Flush any plain text before this token (splitting out operators/parens
+    // when enabled).
+    flushPlain(plainStart, keyStart)
 
     segments.push({
       type: 'token',
@@ -168,15 +297,8 @@ export function parseTokenizedSearch<K extends string>(
     i = valueEnd
   }
 
-  // Flush trailing plain text
-  if (plainStart < text.length) {
-    segments.push({
-      type: 'text',
-      text: text.slice(plainStart),
-      start: plainStart,
-      end: text.length,
-    })
-  }
+  // Flush trailing plain text (splitting out operators/parens when enabled).
+  flushPlain(plainStart, text.length)
 
   return segments
 }

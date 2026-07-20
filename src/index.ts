@@ -6,6 +6,10 @@ import {
   TokenizedSearch as _TokenizedSearch,
 } from './TokenizedSearch.tsx'
 import {
+  DEFAULT_MAX_NESTING as _DEFAULT_MAX_NESTING,
+  parseExpression as _parseExpression,
+} from './expression.ts'
+import {
   getOptionDisplayText as _getOptionDisplayText,
   parseTokenizedSearch as _parseTokenizedSearch,
 } from './parser.ts'
@@ -17,9 +21,16 @@ import {
   toTechnicalQuery as _toTechnicalQuery,
 } from './translation.ts'
 
+export type { ParseExpressionOptions } from './expression.ts'
 export type { SlotProps } from './slots.tsx'
 export type {
   DropdownContext,
+  ExpressionError,
+  ExpressionErrorCode,
+  OperatorKind,
+  OperatorSegment,
+  ParsedExpression,
+  SearchAst,
   SuggestDropdownContext,
   TextSegment,
   TokenOption,
@@ -33,6 +44,8 @@ export type {
 
 const TokenizedSearch = _TokenizedSearch
 const parseTokenizedSearch = _parseTokenizedSearch
+const parseExpression = _parseExpression
+const DEFAULT_MAX_NESTING = _DEFAULT_MAX_NESTING
 const getOptionDisplayText = _getOptionDisplayText
 const toTechnicalQuery = _toTechnicalQuery
 const toDisplayQuery = _toDisplayQuery
@@ -41,6 +54,8 @@ const slots = _slots
 export {
   TokenizedSearch,
   parseTokenizedSearch,
+  parseExpression,
+  DEFAULT_MAX_NESTING,
   getOptionDisplayText,
   toTechnicalQuery,
   toDisplayQuery,

@@ -97,9 +97,74 @@ export interface TextSegment {
   end: number
 }
 
+/** A boolean operator or grouping parenthesis found between tokens. */
+export type OperatorKind = 'and' | 'or' | 'not' | 'open' | 'close'
+
+export interface OperatorSegment {
+  type: 'operator'
+  /**
+   * `and` / `or` are the binary boolean operators and `not` is the unary
+   * negation operator (uppercase `AND` / `OR` / `NOT` in the raw text).
+   * `open` / `close` are grouping parentheses `(` / `)`. An implicit space
+   * between tokens is *not* emitted as an operator — it is inferred as `and`
+   * by the expression parser.
+   */
+  op: OperatorKind
+  start: number
+  end: number
+}
+
 export type TokenizedSearchSegment<K extends string = string> =
   | TokenSegment<K>
   | TextSegment
+  | OperatorSegment
+
+// ── Boolean Expression Tree (AST) ─────────────────────────────────────
+
+/**
+ * A parsed boolean expression tree derived from the flat segment stream.
+ * Precedence is `not:` (token-level) > AND > OR; parentheses override it.
+ * An implicit space between operands is treated as AND.
+ */
+export type SearchAst<K extends string = string> =
+  | { type: 'and'; children: SearchAst<K>[] }
+  | { type: 'or'; children: SearchAst<K>[] }
+  | { type: 'not'; child: SearchAst<K> }
+  | { type: 'token'; token: TokenSegment<K> }
+
+export type ExpressionErrorCode =
+  | 'unbalanced-open' // a "(" without a matching ")"
+  | 'unbalanced-close' // a ")" without a matching "("
+  | 'dangling-operator' // an AND/OR with a missing operand
+  | 'empty-group' // "()" with nothing inside
+  | 'max-nesting-exceeded' // parentheses nested deeper than allowed
+
+export interface ExpressionError {
+  code: ExpressionErrorCode
+  /** Character offset in the raw text where the problem was detected. */
+  start: number
+  end: number
+}
+
+export interface ParsedExpression<K extends string = string> {
+  /**
+   * The expression tree, or `null` when the query contains no tokens.
+   * Always best-effort: on malformed input the parser recovers and still
+   * returns whatever tree it could build, with details in `errors`.
+   */
+  ast: SearchAst<K> | null
+  /** The flat segment stream this tree was built from (backward compatible). */
+  segments: TokenizedSearchSegment<K>[]
+  /**
+   * A human-readable string rendering of the `ast`, useful for debugging and
+   * display. Tokens render as `key:value` (with a trailing `!` when negated);
+   * nodes render as `AND(…)`, `OR(…)`, `NOT(…)`; an empty tree renders as `∅`.
+   */
+  expression: string
+  /** True when the expression is well-formed (no `errors`). */
+  valid: boolean
+  errors: ExpressionError[]
+}
 
 // ── Component Props ───────────────────────────────────────────────────
 
@@ -110,16 +175,42 @@ export interface TokenizedSearchProps<K extends string = string> {
   value?: string
   /** Default value (uncontrolled) */
   defaultValue?: string
-  /** Called when the text value changes */
-  onChange?: (value: string, segments: TokenizedSearchSegment<K>[]) => void
-  /** Called when user presses Enter to submit. Receives parsed segments and raw query text. */
-  onSearch?: (segments: TokenizedSearchSegment<K>[], rawText: string) => void
+  /**
+   * Called when the text value changes. Receives the raw text, the flat parsed
+   * segments, and the parsed boolean expression tree (`expression.ast`, plus
+   * validity/errors). The third argument is always provided; consumers that
+   * only need text/segments can ignore it.
+   */
+  onChange?: (
+    value: string,
+    segments: TokenizedSearchSegment<K>[],
+    expression: ParsedExpression<K>,
+  ) => void
+  /**
+   * Called when the user submits (Enter / submit button, or every change in
+   * `autoCommit` mode). Receives the parsed segments, the technical query text,
+   * and the parsed boolean expression tree.
+   */
+  onSearch?: (
+    segments: TokenizedSearchSegment<K>[],
+    rawText: string,
+    expression: ParsedExpression<K>,
+  ) => void
   /**
    * Auto-committing mode. When set, `onSearch` fires on every change (with the
    * technical query, once async options have resolved) instead of only on
    * Enter / submit, and the submit button is not rendered.
    */
   autoCommit?: boolean
+  /**
+   * Enable complex queries: boolean operators (`AND`, `OR`) and grouping
+   * parentheses. When `false` (the default), `AND`/`OR` and `(`/`)` carry no
+   * special meaning — they are treated as ordinary search text. When `true`,
+   * operators are parsed, highlighted, suggested, validated, and exposed as a
+   * boolean expression tree (`parseExpression`) via the `onChange` / `onSearch`
+   * `expression` argument.
+   */
+  complex?: boolean
   /** Small variant */
   small?: boolean
   /** Disable the input — blocks editing, dropdowns, and submit */

@@ -23,10 +23,45 @@ const segments = parseTokenizedSearch<'status' | 'source'>(
 | `rawText` | `string` | — | The raw search query |
 | `tokenKeys` | `string[]` | — | Recognized token key names (and labels) |
 | `negationLabel` | `string` | `'not'` | Negation prefix for detecting negated tokens |
+| `parseOperators` | `boolean` | `true` | Parse `AND` / `OR` and `(` / `)` as operator segments. When `false`, they stay plain text and parens don't delimit tokens |
 
 ### Returns
 
-`TokenizedSearchSegment[]` — array of `TokenSegment` and `TextSegment` objects.
+`TokenizedSearchSegment[]` — array of `TokenSegment`, `TextSegment`, and `OperatorSegment` objects. Operator segments (`{ type: 'operator', op: 'and' | 'or' | 'not' | 'open' | 'close' }`) are emitted for uppercase `AND` / `OR` / `NOT` and grouping parens `(` / `)`.
+
+---
+
+## parseExpression
+
+Build a boolean [expression tree](/concepts/05-boolean-operators/) from a flat segment stream. Combine it with `parseTokenizedSearch` to parse a raw query into an AST.
+
+```tsx
+import { parseTokenizedSearch, parseExpression } from '@requence/tokenized-search'
+
+const segments = parseTokenizedSearch('(type:bug OR type:feature) AND assignee:me', keys)
+const { ast, valid, errors } = parseExpression(segments)
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `segments` | `TokenizedSearchSegment[]` | — | Segments from `parseTokenizedSearch` |
+| `options.maxNesting` | `number` | `5` | Max parenthesis nesting depth before an error is recorded |
+
+### Returns
+
+`ParsedExpression`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ast` | `SearchAst \| null` | The boolean tree (`null` when there are no tokens) |
+| `segments` | `TokenizedSearchSegment[]` | The input segments |
+| `expression` | `string` | Human-readable rendering of the tree (`key:value`, `AND(…)`, `OR(…)`, `NOT(…)`, `∅`) |
+| `valid` | `boolean` | `true` when the expression is well-formed |
+| `errors` | `ExpressionError[]` | Problems found (unbalanced parens, dangling operators, empty groups, over-nesting), each with a `code` and character range |
+
+Parsing is tolerant: it never throws, and always returns a best-effort tree with details in `errors`.
 
 ---
 

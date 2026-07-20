@@ -51,6 +51,21 @@ interface TextSegment {
 }
 ```
 
+### Operator Segments
+
+Emitted for the boolean operators `AND` / `OR` / `NOT` (uppercase only) and grouping parens `(` / `)`:
+
+```ts
+interface OperatorSegment {
+  type: 'operator'
+  op: 'and' | 'or' | 'not' | 'open' | 'close'
+  start: number
+  end: number
+}
+```
+
+Turn a flat segment stream into a nested tree with `parseExpression`. See [Boolean Operators](/concepts/05-boolean-operators/).
+
 ## Quoted Values
 
 Values containing spaces can be quoted with either double or single quotes:

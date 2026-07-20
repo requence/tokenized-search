@@ -9,14 +9,18 @@ import { tokens } from './tokens'
 export default function LiveExample() {
   const [segments, setSegments] = useState<TokenizedSearchSegment[]>([])
   const [rawText, setRawText] = useState('')
+  const [tree, setTree] = useState<string | null>(null)
 
   return (
     <div className="flex flex-col gap-3">
       <TokenizedSearch
         tokens={tokens}
-        onSearch={(segs, text) => {
+        complex
+        onSearch={(segs, text, expression) => {
           setSegments(segs)
           setRawText(text)
+          console.log(expression)
+          setTree(expression.expression)
         }}
         className="outline-solid outline-3 border-zinc-600 realtive bg-transparent outline-transparent focus-within:border-zinc-500 focus-within:outline-zinc-700/50 focus-within:ring-0 hover:border-zinc-500"
       >
@@ -27,6 +31,7 @@ export default function LiveExample() {
           <TokenizedSearch.TokenKey className="bg-[color-mix(in_srgb,var(--color-orange-500)_25%,var(--color-zinc-900))] text-orange-300" />
           <TokenizedSearch.TokenValue className="bg-[color-mix(in_srgb,var(--color-orange-500)_10%,var(--color-zinc-900))] text-orange-200" />
           <TokenizedSearch.TokenNegation className="bg-[color-mix(in_srgb,var(--color-orange-500)_10%,var(--color-zinc-900))] text-orange-200/60" />
+          <TokenizedSearch.TokenOperator className="text-zinc-500 font-semibold" />
         </TokenizedSearch.Input>
 
         <TokenizedSearch.ClearButton className="text-zinc-500 hover:text-zinc-300 bg-transparent p-0 -translate-y-0.5">
@@ -46,6 +51,9 @@ export default function LiveExample() {
           <TokenizedSearch.FilterByLabel className="text-zinc-500">
             Filter by
           </TokenizedSearch.FilterByLabel>
+          <TokenizedSearch.OperationLabel className="text-zinc-500">
+            Operation
+          </TokenizedSearch.OperationLabel>
           <TokenizedSearch.SuggestionIcon className="text-zinc-500" />
           <TokenizedSearch.EmptyMessage>
             No matching options
@@ -69,6 +77,13 @@ export default function LiveExample() {
             </span>
           )}
         </div>
+        {tree && (
+          <div className="border-b border-zinc-700/50 px-3 py-1.5">
+            <span className="text-[11px] text-zinc-500 font-mono">
+              expression: <span className="text-orange-300">{tree}</span>
+            </span>
+          </div>
+        )}
         <pre className="p-3 text-[12px] leading-relaxed text-zinc-400 font-mono overflow-x-auto m-0 min-h-12 max-h-48">
           {segments.length > 0
             ? JSON.stringify(
@@ -81,7 +96,9 @@ export default function LiveExample() {
                         ...(s.id ? { id: s.id } : {}),
                         ...(s.negated ? { negated: true } : {}),
                       }
-                    : { type: 'text', text: s.text },
+                    : s.type === 'operator'
+                      ? { type: 'operator', op: s.op }
+                      : { type: 'text', text: s.text },
                 ),
                 null,
                 2,

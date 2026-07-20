@@ -39,6 +39,11 @@ export function TokenNegation({ className: _className }: SlotProps) {
 }
 TokenNegation.displayName = 'TokenizedSearch.TokenNegation'
 
+export function TokenOperator({ className: _className }: SlotProps) {
+  return null
+}
+TokenOperator.displayName = 'TokenizedSearch.TokenOperator'
+
 export function ClearButton({
   children: _children,
   className: _className,
@@ -88,6 +93,14 @@ export function FilterByLabel({
 }
 FilterByLabel.displayName = 'TokenizedSearch.FilterByLabel'
 
+export function OperationLabel({
+  children: _children,
+  className: _className,
+}: SlotProps) {
+  return null
+}
+OperationLabel.displayName = 'TokenizedSearch.OperationLabel'
+
 export function SuggestionIcon({ className: _className }: SlotProps) {
   return null
 }
@@ -114,6 +127,7 @@ export const slots = {
   TokenKey,
   TokenValue,
   TokenNegation,
+  TokenOperator,
   ClearButton,
   SubmitButton,
   Dropdown,
@@ -122,6 +136,7 @@ export const slots = {
   DropdownSeparator,
   HighlightMatch,
   FilterByLabel,
+  OperationLabel,
   SuggestionIcon,
   EmptyMessage,
   Loader,

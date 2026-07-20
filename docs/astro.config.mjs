@@ -56,6 +56,7 @@ export default defineConfig({
             { label: 'Getting Started', slug: 'concepts/01-getting-started' },
             { label: 'Token Definitions', slug: 'concepts/02-token-definitions' },
             { label: 'Query Parsing', slug: 'concepts/03-query-parsing' },
+            { label: 'Boolean Operators', slug: 'concepts/05-boolean-operators' },
             { label: 'Styling', slug: 'concepts/04-styling' },
           ],
         },

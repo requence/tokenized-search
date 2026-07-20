@@ -8,6 +8,7 @@ export interface ResolvedInputSlot {
   tokenKey?: string
   tokenValue?: string
   tokenNegation?: string
+  tokenOperator?: string
 }
 
 export interface ResolvedTextSlot {
@@ -22,6 +23,7 @@ export interface ResolvedDropdownSlot {
   separator?: string
   highlightMatch?: string
   filterByLabel?: ResolvedTextSlot
+  operationLabel?: ResolvedTextSlot
   suggestionIcon?: string
   emptyMessage?: ResolvedTextSlot
   loader?: ResolvedTextSlot
@@ -90,6 +92,9 @@ export function collectSlots(children: ReactNode): ResolvedSlots {
             case 'TokenizedSearch.TokenNegation':
               result.input.tokenNegation = inputChildProps.className
               break
+            case 'TokenizedSearch.TokenOperator':
+              result.input.tokenOperator = inputChildProps.className
+              break
           }
         })
         break
@@ -131,6 +136,12 @@ export function collectSlots(children: ReactNode): ResolvedSlots {
               break
             case 'TokenizedSearch.FilterByLabel':
               result.dropdown.filterByLabel = {
+                className: ddChildProps.className,
+                children: ddChildProps.children,
+              }
+              break
+            case 'TokenizedSearch.OperationLabel':
+              result.dropdown.operationLabel = {
                 className: ddChildProps.className,
                 children: ddChildProps.children,
               }

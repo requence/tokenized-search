@@ -18,9 +18,12 @@ import {
 import { twMerge } from 'tailwind-merge'
 
 import { collectSlots } from './collectSlots.ts'
+import { parseExpression } from './expression.ts'
 import {
   getOptionDisplayText,
+  isDelimiter,
   isSpace,
+  operatorText,
   parseTokenizedSearch,
   splitTextByQuotes,
 } from './parser.ts'
@@ -28,6 +31,7 @@ import { slots } from './slots.tsx'
 import { toDisplayQuery, toTechnicalQuery } from './translation.ts'
 import type {
   DropdownContext,
+  OperatorSegment,
   TokenOption,
   TokenSegment,
   TokenizedSearchProps,
@@ -42,7 +46,16 @@ function createTokenMark(name: string, attr: string, className: string) {
   return Mark.create({
     name,
     addAttributes() {
-      return {}
+      return {
+        // Set on operator marks whose segment is part of a malformed boolean
+        // expression. Renders `data-invalid` so consumers can style the invalid
+        // state with the `data-[invalid]:*` Tailwind variant on <TokenOperator>.
+        invalid: {
+          default: false,
+          parseHTML: (el) => el.hasAttribute('data-invalid'),
+          renderHTML: (attrs) => (attrs.invalid ? { 'data-invalid': '' } : {}),
+        },
+      }
     },
     parseHTML() {
       return [{ tag: `span[${attr}]` }]
@@ -111,9 +124,15 @@ function getCursorContext<K extends string>(
   cursorPos: number,
   tokenKeys: string[],
   negationLabel: string,
+  complex: boolean = false,
 ): DropdownContext<K> | null {
   const text = rawText.replace(/\u00A0/g, ' ')
-  const segments = parseTokenizedSearch<K>(text, tokenKeys, negationLabel)
+  const segments = parseTokenizedSearch<K>(
+    text,
+    tokenKeys,
+    negationLabel,
+    complex,
+  )
 
   // Find which segment the cursor is inside
   const seg = segments.find((s) => s.start <= cursorPos && cursorPos <= s.end)
@@ -141,9 +160,12 @@ function getCursorContext<K extends string>(
     }
   }
 
-  // Otherwise, fallback to the word-walking suggestion mode
+  // Otherwise, fallback to the word-walking suggestion mode. In complex mode
+  // parens delimit words (matching the tokenizer) so a key typed inside a
+  // group — e.g. the "status" in "(status" — is isolated from the leading "(".
+  const isBoundary = complex ? isDelimiter : isSpace
   let wordStart = cursorPos
-  while (wordStart > 0 && !isSpace(text[wordStart - 1])) {
+  while (wordStart > 0 && !isBoundary(text[wordStart - 1])) {
     wordStart--
   }
   const currentWord = text.slice(wordStart, cursorPos)
@@ -152,6 +174,67 @@ function getCursorContext<K extends string>(
     insertAt: wordStart,
     partialKey: currentWord,
   }
+}
+
+// ── Boolean operator suggestions ──────────────────────────────────────
+
+/** Sentinel id marking a dropdown option that inserts a boolean operator. */
+const OPERATOR_OPTION_ID = '__operator__'
+
+/**
+ * Inspect the expression context immediately before `pos` to decide which
+ * boolean operators can legally follow.
+ *
+ * - `afterOperand`: the preceding thing is a complete operand (a token, free
+ *   text, or a closing paren), so `AND` / `OR` — and `)` when inside a group —
+ *   may follow.
+ * - otherwise an operand is expected (start of input, or right after
+ *   `AND` / `OR` / `(`), so a `(` may open a group.
+ */
+function getExpressionContextAt<K extends string>(
+  rawText: string,
+  pos: number,
+  tokenKeys: string[],
+  negationLabel: string,
+): {
+  afterOperand: boolean
+  openDepth: number
+  prevOp: OperatorSegment['op'] | null
+} {
+  const text = rawText.replace(/\u00A0/g, ' ')
+  // Always parses with operators on — only called in complex mode.
+  const segments = parseTokenizedSearch<K>(text, tokenKeys, negationLabel, true)
+
+  let prev: TokenizedSearchSegment<K> | null = null
+  let openDepth = 0
+  for (const s of segments) {
+    // Stop before the segment the cursor sits in / after (e.g. the partial
+    // word being typed), so only fully-preceding segments are considered.
+    if (s.end > pos) {
+      break
+    }
+    if (s.type === 'text' && s.text.trim().length === 0) {
+      continue // whitespace separators don't change the context
+    }
+    if (s.type === 'operator') {
+      if (s.op === 'open') {
+        openDepth++
+      } else if (s.op === 'close') {
+        openDepth = Math.max(0, openDepth - 1)
+      }
+    }
+    prev = s
+  }
+
+  const afterOperand =
+    prev !== null &&
+    (prev.type === 'token' ||
+      prev.type === 'text' ||
+      (prev.type === 'operator' && prev.op === 'close'))
+
+  const prevOp = prev !== null && prev.type === 'operator' ? prev.op : null
+
+  return { afterOperand, openDepth, prevOp }
 }
 
 // ── Validation helpers ────────────────────────────────────────────────
@@ -166,7 +249,12 @@ function isExclusiveDuplicate<K extends string>(
   tokenKeys: string[],
   tokenDefs: readonly TokenizedSearchTokenDefinition<string>[],
   negationLabel: string,
+  complex: boolean = false,
 ): boolean {
+  // Complex mode ignores `exclusive` — a key may repeat freely.
+  if (complex) {
+    return false
+  }
   const key = ctx.key.toLowerCase()
   const def = tokenDefs.find(
     (t) =>
@@ -179,15 +267,17 @@ function isExclusiveDuplicate<K extends string>(
   const defKeyLower = def.key.toLowerCase()
   const defLabelLower = def.label?.toLowerCase()
 
-  return parseTokenizedSearch(text, tokenKeys, negationLabel).some((s) => {
-    if (s.type !== 'token') {
-      return false
-    }
-    const sk = s.key.toLowerCase()
-    const matches =
-      sk === defKeyLower || (defLabelLower && sk === defLabelLower)
-    return matches && !(s.start <= cursorPos && cursorPos <= s.end)
-  })
+  return parseTokenizedSearch(text, tokenKeys, negationLabel, complex).some(
+    (s) => {
+      if (s.type !== 'token') {
+        return false
+      }
+      const sk = s.key.toLowerCase()
+      const matches =
+        sk === defKeyLower || (defLabelLower && sk === defLabelLower)
+      return matches && !(s.start <= cursorPos && cursorPos <= s.end)
+    },
+  )
 }
 
 /**
@@ -199,6 +289,7 @@ function getValidTokenIndices(
   tokenDefs: readonly TokenizedSearchTokenDefinition<string>[],
   strictValuesMap: Map<string, Set<string>>,
   activeKey?: string,
+  complex: boolean = false,
 ): Set<number> {
   const valid = new Set<number>()
   const seenPairs = new Set<string>()
@@ -221,16 +312,20 @@ function getValidTokenIndices(
     const lk = def.key.toLowerCase()
     const pair = `${lk}:${seg.value.toLowerCase()}`
 
-    if (seenPairs.has(pair)) {
-      continue
-    }
-    seenPairs.add(pair)
-
-    if (def.exclusive) {
-      if (seenExclusive.has(lk)) {
+    // Complex mode allows a token to appear any number of times, so the
+    // duplicate-pair and `exclusive` restrictions are skipped.
+    if (!complex) {
+      if (seenPairs.has(pair)) {
         continue
       }
-      seenExclusive.add(lk)
+      seenPairs.add(pair)
+
+      if (def.exclusive) {
+        if (seenExclusive.has(lk)) {
+          continue
+        }
+        seenExclusive.add(lk)
+      }
     }
 
     const isActive =
@@ -270,18 +365,20 @@ function applyTokenMarks(
   strictValuesMap: Map<string, Set<string>>,
   activeKey?: string,
   negationLabel: string = 'not',
+  complex: boolean = false,
 ) {
   if (!editor || editor.isDestroyed || !editor.schema) {
     return
   }
 
   const text = editor.getText()
-  const segments = parseTokenizedSearch(text, tokenKeys, negationLabel)
+  const segments = parseTokenizedSearch(text, tokenKeys, negationLabel, complex)
   const validIndices = getValidTokenIndices(
     segments,
     tokenDefs,
     strictValuesMap,
     activeKey,
+    complex,
   )
 
   const { tr } = editor.state
@@ -291,6 +388,7 @@ function applyTokenMarks(
   const tokenKeyType = editor.schema.marks.tokenKey
   const tokenValueType = editor.schema.marks.tokenValue
   const tokenNegationType = editor.schema.marks.tokenNegation
+  const tokenOperatorType = editor.schema.marks.tokenOperator
   if (tokenKeyType) {
     tr.removeMark(from, from + textLength, tokenKeyType)
   }
@@ -299,6 +397,9 @@ function applyTokenMarks(
   }
   if (tokenNegationType) {
     tr.removeMark(from, from + textLength, tokenNegationType)
+  }
+  if (tokenOperatorType) {
+    tr.removeMark(from, from + textLength, tokenOperatorType)
   }
 
   // Auto-correct token key casing to match the canonical label.
@@ -408,6 +509,29 @@ function applyTokenMarks(
     }
   }
 
+  // Style boolean operators and grouping parens (AND / OR / "(" / ")"). Segments
+  // that are part of a malformed boolean expression (unbalanced parens, dangling
+  // operators, empty groups, over-nesting) additionally carry `invalid`, which
+  // renders `data-invalid` on the span. Every parse error anchors to an operator
+  // segment, so this fully replaces the old dedicated error mark. Validation is
+  // best-effort and non-blocking — the parser still recovers a usable tree while
+  // the user finishes typing.
+  if (tokenOperatorType) {
+    const { errors } = parseExpression(segments)
+    for (const seg of segments) {
+      if (seg.type === 'operator') {
+        const invalid = errors.some(
+          (err) => err.start === seg.start && err.end === seg.end,
+        )
+        tr.addMark(
+          from + seg.start,
+          from + seg.end,
+          tokenOperatorType.create({ invalid }),
+        )
+      }
+    }
+  }
+
   tr.setMeta('addToHistory', false)
   tr.setMeta('tokenMarks', true)
   editor.view.dispatch(tr)
@@ -421,8 +545,9 @@ function ensureTokenSpacing(
   text: string,
   tokenKeys: string[],
   negationLabel: string,
+  complex: boolean = false,
 ): string {
-  const segments = parseTokenizedSearch(text, tokenKeys, negationLabel)
+  const segments = parseTokenizedSearch(text, tokenKeys, negationLabel, complex)
   let result = ''
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]
@@ -436,7 +561,7 @@ function ensureTokenSpacing(
         result += '\u00A0'
       }
     } else {
-      let segText = seg.text
+      let segText = seg.type === 'operator' ? operatorText(seg.op) : seg.text
       // If this text segment follows a token and starts with a regular space,
       // skip it — we already added a \u00A0 above to replace it.
       const prevSeg = i > 0 ? segments[i - 1] : undefined
@@ -458,6 +583,7 @@ function TokenizedSearchBase<K extends string = string>({
   onChange,
   onSearch,
   autoCommit,
+  complex = false,
   small,
   disabled,
   className,
@@ -494,8 +620,8 @@ function TokenizedSearchBase<K extends string = string>({
     const source = isControlled ? (controlledValue ?? '') : defaultValue
     const display = isControlled
       ? source
-      : toDisplayQuery(source, tokens, negationLabel)
-    return ensureTokenSpacing(display, tokenKeysAndLabels, negationLabel)
+      : toDisplayQuery(source, tokens, negationLabel, complex)
+    return ensureTokenSpacing(display, tokenKeysAndLabels, negationLabel, complex)
   }, [
     defaultValue,
     controlledValue,
@@ -528,7 +654,7 @@ function TokenizedSearchBase<K extends string = string>({
   // Track last submitted value to avoid duplicate submissions
   const lastSubmittedRef = useRef<string | null>(null)
   const [submittedQuery, setSubmittedQuery] = useState<string>(() =>
-    toTechnicalQuery(value, tokens, negationLabel).trim(),
+    toTechnicalQuery(value, tokens, negationLabel, undefined, complex).trim(),
   )
 
   // Cache of valid values for strict token keys
@@ -606,6 +732,10 @@ function TokenizedSearchBase<K extends string = string>({
     'py-0.5 italic text-blue-500',
     slotConfig.input.tokenNegation,
   )
+  const tokenOperatorClass = twMerge(
+    'py-0.5 font-semibold text-gray-400 data-[invalid]:text-red-500 data-[invalid]:underline data-[invalid]:decoration-red-500 data-[invalid]:decoration-wavy',
+    slotConfig.input.tokenOperator,
+  )
 
   const TokenKeyMark = useMemo(
     () => createTokenMark('tokenKey', 'data-token-key', tokenKeyClass),
@@ -624,6 +754,15 @@ function TokenizedSearchBase<K extends string = string>({
       ),
     [tokenNegationClass],
   )
+  const TokenOperatorMark = useMemo(
+    () =>
+      createTokenMark(
+        'tokenOperator',
+        'data-token-operator',
+        tokenOperatorClass,
+      ),
+    [tokenOperatorClass],
+  )
 
   const editor = useEditor({
     autofocus: autoFocus ?? false,
@@ -638,6 +777,7 @@ function TokenizedSearchBase<K extends string = string>({
       TokenKeyMark,
       TokenValueMark,
       TokenNegationMark,
+      TokenOperatorMark,
     ],
     content: `<p>${initialLocalValue}</p>`,
     editorProps: {
@@ -687,6 +827,23 @@ function TokenizedSearchBase<K extends string = string>({
     updateDropdownPosition()
   }, [updateDropdownPosition])
 
+  // Keep the fixed-position dropdown pinned to the caret while the page
+  // (or any scroll container) scrolls or the window resizes.
+  useEffect(() => {
+    if (!dropdownContext) {
+      return
+    }
+    const handle = () => updateDropdownPosition()
+    // capture:true so scrolling inside *any* ancestor scroll container fires
+    // it, not just the window (scroll events don't bubble).
+    window.addEventListener('scroll', handle, true)
+    window.addEventListener('resize', handle)
+    return () => {
+      window.removeEventListener('scroll', handle, true)
+      window.removeEventListener('resize', handle)
+    }
+  }, [dropdownContext, updateDropdownPosition])
+
   // ── Dynamic event handlers via useEffect ───────────────────────────
 
   const lastTextRef = useRef(initialLocalValue)
@@ -710,7 +867,7 @@ function TokenizedSearchBase<K extends string = string>({
           if (!isControlled) {
             setInternalValue(text)
           }
-          onChange?.(text, computeSegments(text))
+          emitChange(text, computeSegments(text))
         }
         return
       }
@@ -751,7 +908,7 @@ function TokenizedSearchBase<K extends string = string>({
         if (!isControlled) {
           setInternalValue(text)
         }
-        onChange?.(text, computeSegments(text))
+        emitChange(text, computeSegments(text))
       }
 
       // Always re-evaluate dropdown context (covers both text and selection changes)
@@ -781,6 +938,7 @@ function TokenizedSearchBase<K extends string = string>({
         cursorPos,
         tokenKeysAndLabels,
         negationLabel,
+        complex,
       )
 
       // Suppress dropdown for duplicate exclusive keys
@@ -793,6 +951,7 @@ function TokenizedSearchBase<K extends string = string>({
             tokenKeysAndLabels,
             tokens,
             negationLabel,
+            complex,
           )
         ) {
           ctx = null
@@ -815,6 +974,7 @@ function TokenizedSearchBase<K extends string = string>({
             strictValuesRef.current,
             activeKey,
             negationLabel,
+            complex,
           ),
         )
       }
@@ -877,6 +1037,7 @@ function TokenizedSearchBase<K extends string = string>({
         cursorPos,
         tokenKeysAndLabels,
         negationLabel,
+        complex,
       )
 
       if (ctx?.mode === 'value') {
@@ -888,6 +1049,7 @@ function TokenizedSearchBase<K extends string = string>({
             tokenKeysAndLabels,
             tokens,
             negationLabel,
+            complex,
           )
         ) {
           ctx = null
@@ -907,6 +1069,7 @@ function TokenizedSearchBase<K extends string = string>({
           strictValuesRef.current,
           activeKey,
           negationLabel,
+          complex,
         ),
       )
       setDropdownContext(ctx)
@@ -925,6 +1088,7 @@ function TokenizedSearchBase<K extends string = string>({
           strictValuesRef.current,
           undefined,
           negationLabel,
+          complex,
         )
       }, 150)
     }
@@ -1003,6 +1167,7 @@ function TokenizedSearchBase<K extends string = string>({
           strictValuesRef.current,
           undefined,
           negationLabel,
+          complex,
         )
       }
     }
@@ -1046,6 +1211,7 @@ function TokenizedSearchBase<K extends string = string>({
         pos - 1,
         tokenKeysAndLabels,
         negationLabel,
+        complex,
       ),
     )
     // No cleanup for this timeout: the setDropdownContext call above changes a
@@ -1103,6 +1269,7 @@ function TokenizedSearchBase<K extends string = string>({
           strictValuesRef.current,
           undefined,
           negationLabel,
+          complex,
         ),
       )
     }
@@ -1117,6 +1284,7 @@ function TokenizedSearchBase<K extends string = string>({
       controlledValue ?? '',
       tokenKeysAndLabels,
       negationLabel,
+      complex,
     )
     const currentText = editor.getText().replace(/\u00A0/g, ' ')
     if (currentText !== spacedValue.replace(/\u00A0/g, ' ')) {
@@ -1131,6 +1299,7 @@ function TokenizedSearchBase<K extends string = string>({
           strictValuesRef.current,
           undefined,
           negationLabel,
+          complex,
         )
         suppressUpdateRef.current = false
       })
@@ -1149,9 +1318,10 @@ function TokenizedSearchBase<K extends string = string>({
         return
       }
       const localValue = ensureTokenSpacing(
-        toDisplayQuery(defaultValue, tokens, negationLabel),
+        toDisplayQuery(defaultValue, tokens, negationLabel, complex),
         tokenKeysAndLabels,
         negationLabel,
+        complex,
       )
       const currentText = editor.getText().replace(/\u00A0/g, ' ')
       if (currentText !== localValue) {
@@ -1166,6 +1336,7 @@ function TokenizedSearchBase<K extends string = string>({
             strictValuesRef.current,
             undefined,
             negationLabel,
+            complex,
           )
           suppressUpdateRef.current = false
         })
@@ -1266,12 +1437,17 @@ function TokenizedSearchBase<K extends string = string>({
       currentText,
       oldTokenKeysAndLabels,
       negationLabel,
+      complex,
     )
 
     let newText = ''
     for (const seg of oldSegments) {
-      if (seg.type !== 'token') {
+      if (seg.type === 'text') {
         newText += seg.text
+        continue
+      }
+      if (seg.type === 'operator') {
+        newText += operatorText(seg.op)
         continue
       }
 
@@ -1320,6 +1496,7 @@ function TokenizedSearchBase<K extends string = string>({
         newText,
         tokenKeysAndLabels,
         negationLabel,
+        complex,
       )
       suppressUpdateRef.current = true
       editor.commands.setContent(`<p>${spacedText}</p>`)
@@ -1332,6 +1509,7 @@ function TokenizedSearchBase<K extends string = string>({
           strictValuesRef.current,
           undefined,
           negationLabel,
+          complex,
         )
         suppressUpdateRef.current = false
       })
@@ -1344,11 +1522,12 @@ function TokenizedSearchBase<K extends string = string>({
         tokens,
         negationLabel,
         optionValueMapRef.current,
+        complex,
       ).trim()
-      onChange?.(newText, computeSegments(newText))
+      emitChange(newText, computeSegments(newText))
       lastSubmittedRef.current = technicalQuery
       setSubmittedQuery(technicalQuery)
-      onSearch?.(computeSegments(newText), technicalQuery)
+      emitSearch(computeSegments(newText), technicalQuery)
     }
 
     prevTokensRef.current = tokens
@@ -1360,15 +1539,20 @@ function TokenizedSearchBase<K extends string = string>({
         text,
         tokenKeysAndLabels,
         negationLabel,
+        complex,
       )
       const validIndices = getValidTokenIndices(
         raw,
         tokens,
         strictValuesRef.current,
         undefined,
+        complex,
       )
 
       return raw.flatMap((seg, i): TokenizedSearchSegment<K>[] => {
+        if (seg.type === 'operator') {
+          return [seg]
+        }
         if (seg.type !== 'token') {
           return splitTextByQuotes(seg.text).map((t) => ({
             type: 'text',
@@ -1458,6 +1642,27 @@ function TokenizedSearchBase<K extends string = string>({
   const segments = useMemo(
     () => computeSegments(value),
     [computeSegments, value, resolveGeneration],
+  )
+
+  // Wrappers that attach the parsed boolean expression tree to the public
+  // callbacks. Every onChange/onSearch call routes through these so consumers
+  // always receive the AST alongside the flat segments.
+  const emitChange = useEffectEvent(
+    (text: string, segs: TokenizedSearchSegment<K>[]) => {
+      onChange?.(text, segs, parseExpression<K>(segs))
+    },
+  )
+  const emitSearch = useEffectEvent(
+    (segs: TokenizedSearchSegment<K>[], rawText: string) => {
+      onSearch?.(segs, rawText, parseExpression<K>(segs))
+    },
+  )
+
+  // Whether the current query is a well-formed boolean expression. Surfaced as
+  // `data-invalid` on the root so consumers can style malformed input.
+  const expressionValid = useMemo(
+    () => parseExpression(segments).valid,
+    [segments],
   )
 
   // ── Async value resolution ───────────────────────────────────────
@@ -1597,7 +1802,7 @@ function TokenizedSearchBase<K extends string = string>({
     }
 
     const usedKeys = new Set(
-      parseTokenizedSearch(editorText, tokenKeysAndLabels, negationLabel)
+      parseTokenizedSearch(editorText, tokenKeysAndLabels, negationLabel, complex)
         .filter((s): s is TokenSegment<K> => s.type === 'token')
         .map((s) => {
           const def = tokens.find(
@@ -1609,13 +1814,44 @@ function TokenizedSearchBase<K extends string = string>({
         }),
     )
 
-    return tokens
-      .filter((t) => !t.exclusive || !usedKeys.has(t.key.toLowerCase()))
+    const keySuggestions: TokenOption[] = tokens
+      // In complex mode a key may repeat freely, so `exclusive` is ignored.
+      .filter((t) => complex || !t.exclusive || !usedKeys.has(t.key.toLowerCase()))
       .map((t) => ({
         value: t.key,
         label: t.label ?? t.key,
       }))
-  }, [tokens, dropdownContext, editorText, tokenKeysAndLabels])
+
+    if (!complex) {
+      return keySuggestions
+    }
+
+    // Context-aware operators. After a complete operand: the binary AND / OR.
+    // When an operand is expected (start, or after AND / OR): the unary NOT.
+    // Parentheses are supported when typed, but not offered as options.
+    const { afterOperand, prevOp } = getExpressionContextAt<K>(
+      editorText,
+      dropdownContext.insertAt,
+      tokenKeysAndLabels,
+      negationLabel,
+    )
+    const operators: TokenOption[] = []
+    if (afterOperand) {
+      operators.push({ value: 'AND', label: 'AND', id: OPERATOR_OPTION_ID })
+      operators.push({ value: 'OR', label: 'OR', id: OPERATOR_OPTION_ID })
+    } else if (prevOp !== 'not') {
+      operators.push({ value: 'NOT', label: 'NOT', id: OPERATOR_OPTION_ID })
+    }
+
+    return [...operators, ...keySuggestions]
+  }, [
+    tokens,
+    dropdownContext,
+    editorText,
+    tokenKeysAndLabels,
+    complex,
+    negationLabel,
+  ])
 
   const abortRef = useRef<AbortController | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -1709,6 +1945,7 @@ function TokenizedSearchBase<K extends string = string>({
             strictValuesRef.current,
             undefined,
             negationLabel,
+            complex,
           ),
         )
       }
@@ -1774,9 +2011,30 @@ function TokenizedSearchBase<K extends string = string>({
 
     if (dropdownContext.mode === 'suggest') {
       const { insertAt, partialKey } = dropdownContext
-      const insertion = `${option.label ?? option.value}:`
       const before = text.slice(0, insertAt)
       const after = text.slice(insertAt + partialKey.length)
+
+      let insertion: string
+      if (option.id === OPERATOR_OPTION_ID) {
+        // Boolean operator: space it so it reads naturally and the reopened
+        // dropdown lands in the right expression context. Uses a non-breaking
+        // space (like the rest of the editor) so the trailing space survives
+        // setContent instead of being collapsed as trailing HTML whitespace.
+        const nbsp = String.fromCharCode(0xa0)
+        const lit = option.value
+        const last = before[before.length - 1]
+        const needsLead =
+          before.length > 0 &&
+          !isSpace(last) &&
+          lit !== ')' &&
+          !(lit === '(' && last === '(')
+        const lead = needsLead ? nbsp : ''
+        const trail = lit === '(' ? '' : nbsp
+        insertion = `${lead}${lit}${trail}`
+      } else {
+        insertion = `${option.label ?? option.value}:`
+      }
+
       const next = before + insertion + after
 
       suppressUpdateRef.current = true
@@ -1788,7 +2046,7 @@ function TokenizedSearchBase<K extends string = string>({
       if (!isControlled) {
         setInternalValue(next)
       }
-      onChange?.(next, computeSegments(next))
+      emitChange(next, computeSegments(next))
 
       queueMicrotask(() => {
         applyTokenMarks(
@@ -1798,6 +2056,7 @@ function TokenizedSearchBase<K extends string = string>({
           strictValuesRef.current,
           undefined,
           negationLabel,
+          complex,
         )
         suppressUpdateRef.current = false
         const ctx = getCursorContext<K>(
@@ -1805,6 +2064,7 @@ function TokenizedSearchBase<K extends string = string>({
           cursorPos - 1,
           tokenKeysAndLabels,
           negationLabel,
+          complex,
         )
         setDropdownContext(ctx)
       })
@@ -1829,7 +2089,7 @@ function TokenizedSearchBase<K extends string = string>({
       if (!isControlled) {
         setInternalValue(next)
       }
-      onChange?.(next, computeSegments(next))
+      emitChange(next, computeSegments(next))
 
       queueMicrotask(() => {
         applyTokenMarks(
@@ -1839,6 +2099,7 @@ function TokenizedSearchBase<K extends string = string>({
           strictValuesRef.current,
           undefined,
           negationLabel,
+          complex,
         )
         suppressUpdateRef.current = false
         const ctx = getCursorContext<K>(
@@ -1846,6 +2107,7 @@ function TokenizedSearchBase<K extends string = string>({
           cursorPos - 1,
           tokenKeysAndLabels,
           negationLabel,
+          complex,
         )
         setDropdownContext(ctx)
       })
@@ -1901,7 +2163,7 @@ function TokenizedSearchBase<K extends string = string>({
     if (!isControlled) {
       setInternalValue(next)
     }
-    onChange?.(next, computeSegments(next))
+    emitChange(next, computeSegments(next))
     if (!reopenSuggest) {
       setDropdownContext(null)
     }
@@ -1914,6 +2176,7 @@ function TokenizedSearchBase<K extends string = string>({
         strictValuesRef.current,
         undefined,
         negationLabel,
+        complex,
       )
       suppressUpdateRef.current = false
       if (reopenSuggest) {
@@ -1922,6 +2185,7 @@ function TokenizedSearchBase<K extends string = string>({
           cursorPos - 1,
           tokenKeysAndLabels,
           negationLabel,
+          complex,
         )
         setDropdownContext(ctx)
       }
@@ -1941,6 +2205,7 @@ function TokenizedSearchBase<K extends string = string>({
         text,
         tokenKeysAndLabels,
         negationLabel,
+        complex,
       )
       const currentSegment = segmentsList.find(
         (s) => s.type === 'token' && s.start === replaceStart,
@@ -1977,7 +2242,7 @@ function TokenizedSearchBase<K extends string = string>({
       if (!isControlled) {
         setInternalValue(next)
       }
-      onChange?.(next, computeSegments(next))
+      emitChange(next, computeSegments(next))
 
       if (closeDropdown) {
         setDropdownContext(null)
@@ -1997,6 +2262,7 @@ function TokenizedSearchBase<K extends string = string>({
           strictValuesRef.current,
           undefined,
           negationLabel,
+          complex,
         )
         suppressUpdateRef.current = false
       })
@@ -2026,7 +2292,8 @@ function TokenizedSearchBase<K extends string = string>({
     dropdownContext?.mode === 'suggest' ? tokenKeySuggestions : options
 
   const usedValues = useMemo(() => {
-    if (!dropdownContext || dropdownContext.mode !== 'value') {
+    // Complex mode allows repeats, so no value is considered "used up".
+    if (complex || !dropdownContext || dropdownContext.mode !== 'value') {
       return new Set<string>()
     }
     const key = dropdownContext.key.toLowerCase()
@@ -2043,7 +2310,7 @@ function TokenizedSearchBase<K extends string = string>({
     const defLabelLower = def.label?.toLowerCase()
 
     return new Set(
-      parseTokenizedSearch(editorText, tokenKeysAndLabels, negationLabel)
+      parseTokenizedSearch(editorText, tokenKeysAndLabels, negationLabel, complex)
         .filter((s): s is TokenSegment<K> => {
           if (s.type !== 'token') {
             return false
@@ -2071,7 +2338,7 @@ function TokenizedSearchBase<K extends string = string>({
           return s.value.toLowerCase()
         }),
     )
-  }, [dropdownContext, editorText, tokenKeysAndLabels, tokens])
+  }, [dropdownContext, editorText, tokenKeysAndLabels, tokens, complex])
 
   const currentTokenDef =
     dropdownContext?.mode === 'value'
@@ -2128,7 +2395,10 @@ function TokenizedSearchBase<K extends string = string>({
       ]
     }
 
+    // Per-token negation ("not") is a simple-mode feature. Complex mode uses
+    // the NOT operator instead, so the "not" option is not offered.
     if (
+      !complex &&
       !isNegated &&
       currentTokenDef?.negatable &&
       dropdownContext?.mode === 'value'
@@ -2150,6 +2420,7 @@ function TokenizedSearchBase<K extends string = string>({
     currentTokenDef,
     dropdownContext,
     isStrictValue,
+    complex,
   ])
 
   const isDropdownVisible =
@@ -2215,6 +2486,7 @@ function TokenizedSearchBase<K extends string = string>({
             if (target.id === '__typed_value__') {
               selectOption(target)
               handleSubmit()
+              editor?.commands.blur()
               return
             }
             event.preventDefault()
@@ -2258,6 +2530,7 @@ function TokenizedSearchBase<K extends string = string>({
     if (!consumerPrevented && event.key === 'Enter' && !resolving) {
       event.preventDefault()
       handleSubmit()
+      editor?.commands.blur()
     }
   })
 
@@ -2268,11 +2541,12 @@ function TokenizedSearchBase<K extends string = string>({
       tokens,
       negationLabel,
       optionValueMapRef.current,
+      complex,
     ).trim()
     if (technicalQuery !== lastSubmittedRef.current) {
       lastSubmittedRef.current = technicalQuery
       setSubmittedQuery(technicalQuery)
-      onSearch?.(
+      emitSearch(
         segments.filter((s) => s.type !== 'text' || s.text.trim().length > 0),
         technicalQuery,
       )
@@ -2293,8 +2567,8 @@ function TokenizedSearchBase<K extends string = string>({
     if (!isControlled) {
       setInternalValue('')
     }
-    onChange?.('', [])
-    onSearch?.([], '')
+    emitChange('', [])
+    emitSearch([], '')
     lastSubmittedRef.current = ''
     setSubmittedQuery('')
     // The clear button's onPointerDown preventDefault keeps focus in the
@@ -2304,7 +2578,7 @@ function TokenizedSearchBase<K extends string = string>({
     // used here.
     editor.view.focus()
     setDropdownContext(
-      getCursorContext<K>('', 0, tokenKeysAndLabels, negationLabel),
+      getCursorContext<K>('', 0, tokenKeysAndLabels, negationLabel, complex),
     )
     queueMicrotask(() => {
       suppressUpdateRef.current = false
@@ -2334,11 +2608,11 @@ function TokenizedSearchBase<K extends string = string>({
     }
     lastSubmittedRef.current = currentTechnicalQuery
     setSubmittedQuery(currentTechnicalQuery)
-    onSearch?.(
+    emitSearch(
       segments.filter((s) => s.type !== 'text' || s.text.trim().length > 0),
       currentTechnicalQuery,
     )
-  }, [autoCommit, currentTechnicalQuery, segments, onSearch])
+  }, [autoCommit, currentTechnicalQuery, segments])
 
   // ── Render ─────────────────────────────────────────────────────────
 
@@ -2347,6 +2621,7 @@ function TokenizedSearchBase<K extends string = string>({
       ref={containerRef}
       aria-disabled={disabled || undefined}
       data-disabled={disabled || undefined}
+      data-invalid={!expressionValid || undefined}
       onBlur={(e) => {
         // Dismiss when keyboard focus leaves the widget for a real element
         // outside it. Pointer dismissal (incl. WebKit clicks that focus
@@ -2363,6 +2638,7 @@ function TokenizedSearchBase<K extends string = string>({
             strictValuesRef.current,
             undefined,
             negationLabel,
+            complex,
           )
         }
       }}
@@ -2458,6 +2734,7 @@ function TokenizedSearchBase<K extends string = string>({
                   editor.getText(),
                   tokenKeysAndLabels,
                   negationLabel,
+                  complex,
                 )
                 const currentSegment = segmentsList.find(
                   (s) =>
@@ -2501,21 +2778,58 @@ function TokenizedSearchBase<K extends string = string>({
               </div>
             ) : (
               <div className="flex flex-col gap-0.5">
-                {dropdownContext?.mode === 'suggest' &&
-                  tokenKeySuggestions.length > 0 && (
-                    <div
-                      className={twMerge(
-                        'mb-1 px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-wide text-gray-400',
-                        slotConfig.dropdown.filterByLabel?.className,
+                {activeOptions.map((option, index) => {
+                  // In suggest mode, group operators under an "Operation"
+                  // header and token keys under a "Filter by" header, with a
+                  // separator between the groups.
+                  const suggest = dropdownContext?.mode === 'suggest'
+                  const isOperator = option.id === OPERATOR_OPTION_ID
+                  const firstOperator = activeOptions.findIndex(
+                    (o) => o.id === OPERATOR_OPTION_ID,
+                  )
+                  const firstKey = activeOptions.findIndex(
+                    (o) => o.id !== OPERATOR_OPTION_ID,
+                  )
+                  const headers = suggest ? (
+                    <>
+                      {isOperator && index === firstOperator && (
+                        <div
+                          className={twMerge(
+                            'mb-1 px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-wide text-gray-400',
+                            slotConfig.dropdown.operationLabel?.className,
+                          )}
+                        >
+                          {slotConfig.dropdown.operationLabel?.children ??
+                            'Operation'}
+                        </div>
                       )}
-                    >
-                      {slotConfig.dropdown.filterByLabel?.children ??
-                        'Filter by'}
-                    </div>
-                  )}
-                {activeOptions.map((option, index) =>
-                  option.value === '__not__' ? (
+                      {!isOperator && index === firstKey && (
+                        <>
+                          {firstOperator !== -1 && (
+                            <hr
+                              className={twMerge(
+                                'my-1 border-gray-200',
+                                slotConfig.dropdown.separator,
+                              )}
+                            />
+                          )}
+                          <div
+                            className={twMerge(
+                              'mb-1 px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-wide text-gray-400',
+                              slotConfig.dropdown.filterByLabel?.className,
+                            )}
+                          >
+                            {slotConfig.dropdown.filterByLabel?.children ??
+                              'Filter by'}
+                          </div>
+                        </>
+                      )}
+                    </>
+                  ) : null
+
+                  return option.value === '__not__' ? (
                     <Fragment key="__not__">
+                      {headers}
                       <button
                         type="button"
                         tabIndex={-1}
@@ -2545,44 +2859,48 @@ function TokenizedSearchBase<K extends string = string>({
                       )}
                     </Fragment>
                   ) : (
-                    <button
-                      key={option.value}
-                      type="button"
-                      tabIndex={-1}
-                      onPointerDown={(e) => e.preventDefault()}
-                      onClick={() => selectOption(option)}
-                      onPointerEnter={() => setHighlighted(index)}
-                      onPointerLeave={() => setHighlighted(-1)}
-                      aria-selected={highlighted === index}
-                      className={twMerge(
-                        'flex w-full cursor-pointer items-center rounded-sm px-2 py-1 text-left text-xs outline-none transition-colors duration-75',
-                        slotConfig.dropdown.option,
-                      )}
-                    >
-                      {dropdownContext?.mode === 'suggest' &&
-                        (() => {
-                          const def = tokens.find((t) => t.key === option.value)
-                          return def?.icon ? (
-                            <span
-                              className={twMerge(
-                                'mr-2 flex size-3.5 shrink-0 items-center justify-center text-gray-400',
-                                slotConfig.dropdown.suggestionIcon,
-                              )}
-                            >
-                              {def.icon}
-                            </span>
-                          ) : null
-                        })()}
-                      {option.id === '__typed_value__' && '"'}
-                      <HighlightMatch
-                        text={getOptionDisplayText(option)}
-                        query={filterQuery}
-                        className={slotConfig.dropdown.highlightMatch}
-                      />
-                      {option.id === '__typed_value__' && '"'}
-                    </button>
-                  ),
-                )}
+                    <Fragment key={option.value}>
+                      {headers}
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onPointerDown={(e) => e.preventDefault()}
+                        onClick={() => selectOption(option)}
+                        onPointerEnter={() => setHighlighted(index)}
+                        onPointerLeave={() => setHighlighted(-1)}
+                        aria-selected={highlighted === index}
+                        className={twMerge(
+                          'flex w-full cursor-pointer items-center rounded-sm px-2 py-1 text-left text-xs outline-none transition-colors duration-75',
+                          slotConfig.dropdown.option,
+                        )}
+                      >
+                        {dropdownContext?.mode === 'suggest' &&
+                          (() => {
+                            const def = tokens.find(
+                              (t) => t.key === option.value,
+                            )
+                            return def?.icon ? (
+                              <span
+                                className={twMerge(
+                                  'mr-2 flex size-3.5 shrink-0 items-center justify-center text-gray-400',
+                                  slotConfig.dropdown.suggestionIcon,
+                                )}
+                              >
+                                {def.icon}
+                              </span>
+                            ) : null
+                          })()}
+                        {option.id === '__typed_value__' && '"'}
+                        <HighlightMatch
+                          text={getOptionDisplayText(option)}
+                          query={filterQuery}
+                          className={slotConfig.dropdown.highlightMatch}
+                        />
+                        {option.id === '__typed_value__' && '"'}
+                      </button>
+                    </Fragment>
+                  )
+                })}
               </div>
             )}
           </div>

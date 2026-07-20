@@ -1,4 +1,4 @@
-import { parseTokenizedSearch } from './parser.ts'
+import { operatorText, parseTokenizedSearch } from './parser.ts'
 import type { TokenizedSearchTokenDefinition } from './types.ts'
 
 /**
@@ -10,17 +10,27 @@ export function toTechnicalQuery(
   tokens: TokenizedSearchTokenDefinition<string>[],
   negationLabel: string = 'not',
   optionValueMap?: Map<string, Map<string, string>>,
+  parseOperators: boolean = true,
 ): string {
   const tokenKeysAndLabels = tokens.flatMap((t) => [
     t.key,
     ...(t.label ? [t.label] : []),
   ])
-  const rawSegments = parseTokenizedSearch<string>(rawText, tokenKeysAndLabels, negationLabel)
+  const rawSegments = parseTokenizedSearch<string>(
+    rawText,
+    tokenKeysAndLabels,
+    negationLabel,
+    parseOperators,
+  )
 
   let technicalText = ''
   for (const seg of rawSegments) {
-    if (seg.type !== 'token') {
+    if (seg.type === 'text') {
       technicalText += seg.text
+      continue
+    }
+    if (seg.type === 'operator') {
+      technicalText += operatorText(seg.op)
       continue
     }
 
@@ -79,17 +89,27 @@ export function toDisplayQuery(
   technicalText: string,
   tokens: TokenizedSearchTokenDefinition<string>[],
   negationLabel: string = 'not',
+  parseOperators: boolean = true,
 ): string {
   if (!technicalText) {
     return ''
   }
   const technicalKeys = tokens.map((t) => t.key)
-  const rawSegments = parseTokenizedSearch<string>(technicalText, technicalKeys, 'not')
+  const rawSegments = parseTokenizedSearch<string>(
+    technicalText,
+    technicalKeys,
+    'not',
+    parseOperators,
+  )
 
   let displayText = ''
   for (const seg of rawSegments) {
-    if (seg.type !== 'token') {
+    if (seg.type === 'text') {
       displayText += seg.text
+      continue
+    }
+    if (seg.type === 'operator') {
+      displayText += operatorText(seg.op)
       continue
     }
 

@@ -16,9 +16,10 @@ import { TokenizedSearch } from '@requence/tokenized-search'
 | `tokens` | `(TokenizedSearchTokenDefinition \| null)[]` | `[]` | Token key definitions |
 | `value` | `string` | — | Controlled search value |
 | `defaultValue` | `string` | `''` | Default value (uncontrolled) |
-| `onChange` | `(value, segments) => void` | — | Called on text change |
-| `onSearch` | `(segments, rawText) => void` | — | Called on Enter submit |
+| `onChange` | `(value, segments, expression) => void` | — | Called on text change. `expression` is the parsed [boolean tree](/concepts/05-boolean-operators/) |
+| `onSearch` | `(segments, rawText, expression) => void` | — | Called on Enter submit. `expression` is the parsed [boolean tree](/concepts/05-boolean-operators/) |
 | `autoCommit` | `boolean` | `false` | Fires `onSearch` on every change (with the technical query, once async options resolve) instead of only on Enter/submit, and hides the submit button |
+| `complex` | `boolean` | `false` | Enable boolean operators (`AND`, `OR`) and grouping parentheses. When off, they are treated as literal text. See [Boolean Operators](/concepts/05-boolean-operators/) |
 | `small` | `boolean` | `false` | Small variant |
 | `disabled` | `boolean` | `false` | Disables editing, dropdowns, and submit; greys out the input |
 | `className` | `string` | — | Root container class |
@@ -69,6 +70,7 @@ Must be children of `<Input>`.
 | `<TokenKey>` | Mark styling | — | Inline mark for token keys (e.g. `Status:`) |
 | `<TokenValue>` | Mark styling | — | Inline mark for token values (e.g. `Active`) |
 | `<TokenNegation>` | Mark styling | — | Inline mark for negation prefix (e.g. `not:`) |
+| `<TokenOperator>` | Mark styling | — | Inline mark for boolean operators and parens (`AND`, `OR`, `(`, `)`). Gets `data-invalid` when the operator is part of a malformed expression — target with the `data-[invalid]:*` variant |
 
 ### Dropdown Slots
 
@@ -81,6 +83,7 @@ Must be children of `<Dropdown>`.
 | `<DropdownSeparator>` | Border/divider styling | — | Separator between options and "Not" option |
 | `<HighlightMatch>` | Text color | — | Matched substring within options |
 | `<FilterByLabel>` | Text styling | Label text (e.g. "Filter by") | Header above key suggestions |
+| `<OperationLabel>` | Text styling | Label text (e.g. "Operation") | Header above the `AND` / `OR` suggestions (complex mode) |
 | `<SuggestionIcon>` | Icon wrapper styling | — | Icon container in key suggestions |
 | `<EmptyMessage>` | Text styling | Message text | Shown when no options match |
 | `<Loader>` | Container styling | Spinner + text | Shown while loading async options |
@@ -94,4 +97,5 @@ Must be children of `<Dropdown>`.
 | `aria-busy` | `<SubmitButton>` | Async token values are being resolved (e.g. after paste) |
 | `data-resolving` | `<SubmitButton>` | Same as `aria-busy` — alternative CSS hook |
 | `data-disabled`, `aria-disabled` | Root container | The `disabled` prop is set — target with `data-disabled:*` Tailwind variants |
+| `data-invalid` | Root container | The current query is a malformed boolean expression — target with `data-invalid:*` Tailwind variants |
 | `data-disabled` | `<SubmitButton>` | The `disabled` prop is set (button also gets the native `disabled` attribute) |

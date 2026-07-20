@@ -1,0 +1,120 @@
+---
+title: Boolean Operators
+description: Combine tokens with AND, OR, and parentheses to build nested boolean queries.
+---
+
+By default, tokens in a query are implicitly combined — the component hands you a flat list of segments and your app decides what they mean (typically "all must match", i.e. logical AND). Complex mode lets users express `AND`, `OR`, and grouped sub-expressions, and gives you back a parsed expression tree.
+
+## Enabling complex mode
+
+Set the `complex` prop:
+
+```tsx
+<TokenizedSearch tokens={tokens} complex onSearch={handleSearch} />
+```
+
+`complex` is a single master switch, `false` by default:
+
+- **Off** — `AND`, `OR`, and `(` / `)` have no special meaning. They are treated as ordinary search text, exactly as before this feature existed. This keeps existing consumers unaffected.
+- **On** — operators and parentheses are parsed, highlighted, suggested, validated, and exposed as a boolean expression tree.
+
+## Syntax
+
+| Construct | Example | Meaning |
+|-----------|---------|---------|
+| Implicit AND | `status:open assignee:me` | Both must match |
+| Explicit AND | `status:open AND assignee:me` | Both must match |
+| OR | `type:bug OR type:feature` | Either matches |
+| NOT | `NOT status:closed` | Negates the following operand |
+| Grouping | `(type:bug OR type:feature) AND assignee:me` | Group overrides precedence |
+
+A space between operands means `AND`, so enabling `complex` is backwards compatible — queries that worked before keep the same meaning.
+
+Operators must be **uppercase** (`AND`, `OR`, `NOT`). Lowercase `and` / `or` / `not` are treated as ordinary search text.
+
+### Precedence
+
+`NOT` binds tighter than `AND`, which binds tighter than `OR`; parentheses override all three:
+
+```
+a:1 OR b:2 AND NOT c:3   ≡   a:1 OR (b:2 AND (NOT c:3))
+```
+
+Groups can nest up to five levels deep (matching GitHub issue search). Deeper nesting is flagged as an error.
+
+### Token restrictions in complex mode
+
+Complex mode is about composing arbitrary boolean expressions, so two per-token settings are intentionally ignored:
+
+- **`exclusive`** — every token may appear as many times as the user wants.
+- **`negatable`** (per-token `not:` prefix) — negation is expressed with the `NOT` operator instead, so the "not" value option is not offered.
+
+## Autocomplete
+
+In complex mode the suggestion dropdown groups operators under an "Operation" header, followed by a separator and the token keys under "Filter by":
+
+- After a complete token or group, it offers the binary `AND` and `OR`.
+- When an operand is expected (at the start, or right after `AND` / `OR`), it offers the unary `NOT`.
+
+Parentheses are supported when typed but are not offered as dropdown options. The two headers are customizable via the `<OperationLabel>` and `<FilterByLabel>` slots.
+
+## The expression tree
+
+`onChange` and `onSearch` receive a parsed `ParsedExpression` as their third argument, containing the boolean tree (`ast`), a `valid` flag, and any `errors`:
+
+```tsx
+<TokenizedSearch
+  tokens={tokens}
+  complex
+  onSearch={(segments, rawText, expression) => {
+    if (!expression.valid) return
+    runQuery(expression.ast)
+  }}
+/>
+```
+
+The `ast` is a tree of `and` / `or` / `not` nodes and `token` leaves. Free text is not part of the tree (it stays in `segments`):
+
+```ts
+type SearchAst =
+  | { type: 'and'; children: SearchAst[] }
+  | { type: 'or'; children: SearchAst[] }
+  | { type: 'not'; child: SearchAst }
+  | { type: 'token'; token: TokenSegment }
+```
+
+For example, `(type:bug OR type:feature) AND assignee:me` parses to:
+
+```ts
+{
+  type: 'and',
+  children: [
+    { type: 'or', children: [
+      { type: 'token', token: { key: 'type', value: 'bug', ... } },
+      { type: 'token', token: { key: 'type', value: 'feature', ... } },
+    ] },
+    { type: 'token', token: { key: 'assignee', value: 'me', ... } },
+  ],
+}
+```
+
+You can also parse a query outside the component with [`parseExpression`](/reference/02-parser-utilities/#parseexpression).
+
+## Validation
+
+Parsing is tolerant — it never throws. On malformed input (unbalanced parentheses, a dangling `AND` / `OR`, an empty group `()`, or over-nesting) it records the problem in `errors`, recovers a best-effort tree, and keeps going while the user types.
+
+The component surfaces this without blocking submission:
+
+- The offending operators and parens get a `data-invalid` attribute on their `<TokenOperator>` mark — style the invalid state with the `data-[invalid]:*` Tailwind variant.
+- The root container also gets `data-invalid` while the expression is malformed.
+
+```tsx
+<TokenizedSearch complex className="data-invalid:ring-2 data-invalid:ring-red-500">
+  <TokenizedSearch.Input>
+    <TokenizedSearch.TokenOperator className="text-zinc-500 font-semibold data-[invalid]:text-red-500 data-[invalid]:underline data-[invalid]:decoration-wavy" />
+  </TokenizedSearch.Input>
+</TokenizedSearch>
+```
+
+See [Styling](/concepts/04-styling/) for the full list of marks.

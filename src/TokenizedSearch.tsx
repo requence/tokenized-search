@@ -2467,12 +2467,16 @@ function TokenizedSearchBase<K extends string = string>({
             }
           }
           event.preventDefault()
-          setHighlighted((h) => Math.min(h + 1, activeOptions.length - 1))
+          setHighlighted((h) =>
+            h >= activeOptions.length - 1 ? 0 : h + 1
+          )
           return
         }
         case 'ArrowUp': {
           event.preventDefault()
-          setHighlighted((h) => Math.max(h - 1, 0))
+          setHighlighted((h) =>
+            h <= 0 ? activeOptions.length - 1 : h - 1
+          )
           return
         }
         case 'Enter': {

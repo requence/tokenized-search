@@ -1,5 +1,13 @@
 # @requence/tokenized-search
 
+## 1.9.1
+
+### Patch Changes
+
+- f28b385: Make the suggestions popover keyboard navigation wrap around. Pressing
+  ArrowUp on the first option now selects the last option, and ArrowDown
+  on the last option selects the first.
+
 ## 1.9.0
 
 ### Minor Changes

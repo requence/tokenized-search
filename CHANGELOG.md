@@ -1,5 +1,16 @@
 # @requence/tokenized-search
 
+## 1.11.0
+
+### Minor Changes
+
+- 57fb8ad: Make all UI dependencies (`react`, `react-dom`, the `@tiptap/*` packages, and
+  `tailwind-merge`) optional peer dependencies so that installing the package for
+  core-only usage (`@requence/tokenized-search/core`, e.g. server-side query
+  parsing) pulls in no UI packages. Projects rendering the `<TokenizedSearch />`
+  component must now install those packages themselves; the README and docs
+  include the install command.
+
 ## 1.10.0
 
 ### Minor Changes

@@ -10,6 +10,22 @@ Tokenized search input with TipTap-powered rich text editing, dropdown suggestio
 npm install @requence/tokenized-search
 ```
 
+All UI dependencies (`react`, `react-dom`, the `@tiptap/*` packages, and
+`tailwind-merge`) are **optional peer dependencies** — installing the package
+pulls in none of them. To use the `<TokenizedSearch />` component, install
+them alongside:
+
+```bash
+npm install react react-dom tailwind-merge \
+  @tiptap/core @tiptap/pm @tiptap/react \
+  @tiptap/extension-document @tiptap/extension-history \
+  @tiptap/extension-paragraph @tiptap/extension-text
+```
+
+Consumers that only parse queries (e.g. server-side code importing from
+[`@requence/tokenized-search/core`](#server-side-parsing-core-entry)) need no
+extra installs.
+
 ## Prerequisites
 
 This package uses [Tailwind CSS](https://tailwindcss.com/) utility classes internally (via `tailwind-merge`). Your project must have Tailwind CSS configured for the component to render correctly.
@@ -79,8 +95,9 @@ All types are exported as named type exports:
 
 The parsing pipeline is also available from `@requence/tokenized-search/core` —
 the exact same implementation the `<TokenizedSearch />` component runs, but with
-no React or TipTap anywhere in its module graph (runtime *and* types). Use it to
-parse queries in server-side code:
+no React or TipTap anywhere in its module graph (runtime *and* types). Since all
+UI packages are optional peer dependencies, a core-only install stays free of
+react and tiptap entirely. Use it to parse queries in server-side code:
 
 ```ts
 import { parseTokenizedSearch, parseExpression } from '@requence/tokenized-search/core'

@@ -9,6 +9,19 @@ description: Install and set up @requence/tokenized-search in your React project
 npm install @requence/tokenized-search
 ```
 
+All UI dependencies (`react`, `react-dom`, the `@tiptap/*` packages, and
+`tailwind-merge`) are **optional peer dependencies**, so installing the package
+pulls in none of them — a server that only parses queries via the
+[`core` entry](/reference/02-parser-utilities/) stays free of UI packages. To
+use the `<TokenizedSearch />` component, install them alongside:
+
+```bash
+npm install react react-dom tailwind-merge \
+  @tiptap/core @tiptap/pm @tiptap/react \
+  @tiptap/extension-document @tiptap/extension-history \
+  @tiptap/extension-paragraph @tiptap/extension-text
+```
+
 ## Tailwind CSS Setup
 
 This package uses [Tailwind CSS](https://tailwindcss.com/) utility classes internally (via `tailwind-merge`). Add the `@source` directive to your CSS entry point so Tailwind scans the package for class names:

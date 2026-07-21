@@ -11,7 +11,7 @@ await mkdir(OUT, { recursive: true })
 process.env.NODE_ENV = 'production'
 
 const result = await Bun.build({
-  entrypoints: [`${SRC}/index.ts`],
+  entrypoints: [`${SRC}/index.ts`, `${SRC}/core.ts`],
   outdir: OUT,
   root: SRC,
   target: 'node',

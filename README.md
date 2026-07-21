@@ -75,6 +75,27 @@ All types are exported as named type exports:
 
 `TokenizedSearchProps`, `TokenizedSearchHandle`, `TokenizedSearchTokenDefinition`, `TokenOption`, `TokenizedSearchSegment`, `TokenSegment`, `TextSegment`, `DropdownContext`, `ValueDropdownContext`, `SuggestDropdownContext`, `SlotProps`
 
+### Server-side parsing (`/core` entry)
+
+The parsing pipeline is also available from `@requence/tokenized-search/core` —
+the exact same implementation the `<TokenizedSearch />` component runs, but with
+no React or TipTap anywhere in its module graph (runtime *and* types). Use it to
+parse queries in server-side code:
+
+```ts
+import { parseTokenizedSearch, parseExpression } from '@requence/tokenized-search/core'
+
+const segments = parseTokenizedSearch('status:FAILED created:>=now-8m', ['status', 'created'])
+const { ast, valid } = parseExpression(segments)
+```
+
+It exports `parseTokenizedSearch`, `parseExpression`, `DEFAULT_MAX_NESTING`,
+and `getOptionDisplayText`, plus the pure types: `TokenOption`, `TokenSegment`,
+`TextSegment`, `OperatorKind`, `OperatorSegment`, `TokenizedSearchSegment`,
+`SearchAst`, `ExpressionError`, `ExpressionErrorCode`, `ParsedExpression`, and
+`ParseExpressionOptions`. When client and server both parse the same stored
+queries, keep them on the same package version so the grammar cannot drift.
+
 ## Customization with Slots
 
 `TokenizedSearch` is a compound component. Pass slot sub-components as `children` to override default classes and content. Slots are config-only — they render nothing themselves; the root component reads their props.

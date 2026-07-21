@@ -6,7 +6,7 @@ import type {
   SearchAst,
   TokenSegment,
   TokenizedSearchSegment,
-} from './types.ts'
+} from './coreTypes.ts'
 
 /** Default maximum parenthesis nesting depth (matches GitHub issue search). */
 export const DEFAULT_MAX_NESTING = 5

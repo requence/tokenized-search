@@ -3,6 +3,28 @@ title: Parser Utilities
 description: API reference for parseTokenizedSearch and getOptionDisplayText.
 ---
 
+Every utility on this page is exported from the package root **and** from the
+`@requence/tokenized-search/core` entry point. The `core` entry contains only
+the parsing pipeline — no React or TipTap in its module graph (runtime or
+types) — making it safe to import in server-side code that needs to parse the
+same queries the `<TokenizedSearch />` component produces:
+
+```ts
+import {
+  parseTokenizedSearch,
+  parseExpression,
+  DEFAULT_MAX_NESTING,
+  getOptionDisplayText,
+} from '@requence/tokenized-search/core'
+```
+
+The pure parser types (`TokenOption`, `TokenSegment`, `TextSegment`,
+`OperatorKind`, `OperatorSegment`, `TokenizedSearchSegment`, `SearchAst`,
+`ExpressionError`, `ExpressionErrorCode`, `ParsedExpression`,
+`ParseExpressionOptions`) are exported from both entries as well. Both entries
+share one implementation, so client and server parse identically — just keep
+them on the same package version.
+
 ## parseTokenizedSearch
 
 Parse a raw search string into segments of recognized `key:value` tokens and plain text.

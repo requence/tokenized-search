@@ -2,7 +2,7 @@ import type {
   OperatorSegment,
   TokenOption,
   TokenizedSearchSegment,
-} from './types.ts'
+} from './coreTypes.ts'
 
 const sQuote = String.fromCharCode(39)
 
